@@ -1,0 +1,78 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services;
+
+use Illuminate\Support\Facades\DB;
+
+final class LeaveTypeService
+{
+    public function __construct(
+        private readonly LeaveBalanceService $balances,
+    ) {}
+
+    /**
+     * @return array<int, object>
+     */
+    public function list(): array
+    {
+        return DB::table('leave_types')
+            ->orderBy('name')
+            ->get()
+            ->all();
+    }
+
+    public function create(
+        string $name,
+        string $code,
+        int $yearlyAllocationDays,
+        bool $carryForwardEnabled,
+        ?int $carryForwardMaxDays,
+        ?string $description,
+    ): int {
+        $leaveTypeId = DB::table('leave_types')->insertGetId([
+            'name' => $name,
+            'code' => $code,
+            'yearly_allocation_days' => $yearlyAllocationDays,
+            'carry_forward_enabled' => $carryForwardEnabled,
+            'carry_forward_max_days' => $carryForwardEnabled ? $carryForwardMaxDays : null,
+            'description' => $description,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->balances->provisionForLeaveType($leaveTypeId, (int) date('Y'));
+
+        return $leaveTypeId;
+    }
+
+    public function update(
+        int $leaveTypeId,
+        string $name,
+        string $code,
+        int $yearlyAllocationDays,
+        bool $carryForwardEnabled,
+        ?int $carryForwardMaxDays,
+        ?string $description,
+    ): void {
+        DB::table('leave_types')->where('id', $leaveTypeId)->update([
+            'name' => $name,
+            'code' => $code,
+            'yearly_allocation_days' => $yearlyAllocationDays,
+            'carry_forward_enabled' => $carryForwardEnabled,
+            'carry_forward_max_days' => $carryForwardEnabled ? $carryForwardMaxDays : null,
+            'description' => $description,
+            'updated_at' => now(),
+        ]);
+    }
+
+    public function setActive(int $leaveTypeId, bool $active): void
+    {
+        DB::table('leave_types')->where('id', $leaveTypeId)->update(['is_active' => $active]);
+
+        if ($active) {
+            $this->balances->provisionForLeaveType($leaveTypeId, (int) date('Y'));
+        }
+    }
+}

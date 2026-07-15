@@ -1,0 +1,374 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Feature\Admin;
+
+use App\Livewire\Admin\Departments;
+use App\Livewire\Admin\Employees;
+use App\Livewire\Admin\LeaveTypes;
+use App\Models\Department;
+use App\Models\LeaveType;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
+use Tests\TestCase;
+
+class AdminManagementTest extends TestCase
+{
+    use RefreshDatabase;
+
+    /**
+     * Livewire::test() mounts components directly and skips full-page layout
+     * resolution, so it can't catch a missing/mismatched Livewire page layout.
+     * Hitting the real routes closes that gap (bit us once already on the
+     * leave pages).
+     */
+    public function test_admin_pages_render_successfully_over_http(): void
+    {
+        $hr = User::factory()->hr()->create();
+
+        $this->actingAs($hr)->get(route('admin.employees'))->assertOk();
+        $this->actingAs($hr)->get(route('admin.departments'))->assertOk();
+        $this->actingAs($hr)->get(route('admin.leave-types'))->assertOk();
+    }
+
+    public function test_non_hr_users_cannot_access_any_admin_screen(): void
+    {
+        $employee = User::factory()->create();
+        $manager = User::factory()->manager()->create();
+
+        foreach ([$employee, $manager] as $user) {
+            $this->actingAs($user)->get(route('admin.employees'))->assertForbidden();
+            $this->actingAs($user)->get(route('admin.departments'))->assertForbidden();
+            $this->actingAs($user)->get(route('admin.leave-types'))->assertForbidden();
+        }
+    }
+
+    public function test_hr_can_create_an_employee_and_leave_balances_are_provisioned(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $department = Department::factory()->create();
+        $manager = User::factory()->manager()->create();
+        $leaveType = LeaveType::factory()->create(['yearly_allocation_days' => 15]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('startCreate')
+            ->set('name', 'New Hire')
+            ->set('email', 'new.hire@leavedesk.test')
+            ->set('password', 'password123')
+            ->set('role', 'employee')
+            ->set('departmentId', $department->id)
+            ->set('managerId', $manager->id)
+            ->set('joinedAt', now()->toDateString())
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('users', [
+            'email' => 'new.hire@leavedesk.test',
+            'role' => 'employee',
+            'department_id' => $department->id,
+            'manager_id' => $manager->id,
+        ]);
+
+        $newEmployee = User::where('email', 'new.hire@leavedesk.test')->firstOrFail();
+
+        $this->assertDatabaseHas('leave_balances', [
+            'user_id' => $newEmployee->id,
+            'leave_type_id' => $leaveType->id,
+            'allocated_days' => 15,
+            'year' => now()->year,
+        ]);
+    }
+
+    public function test_hr_cannot_create_an_employee_with_a_duplicate_email(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $existing = User::factory()->create(['email' => 'taken@leavedesk.test']);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('startCreate')
+            ->set('name', 'Someone')
+            ->set('email', 'taken@leavedesk.test')
+            ->set('password', 'password123')
+            ->set('role', 'employee')
+            ->set('joinedAt', now()->toDateString())
+            ->call('save')
+            ->assertHasErrors('email');
+    }
+
+    public function test_hr_can_edit_an_employee_without_changing_the_password(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $employee = User::factory()->create(['name' => 'Old Name']);
+        $originalPassword = $employee->password;
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('edit', $employee->id)
+            ->set('name', 'Updated Name')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $employee->refresh();
+
+        $this->assertSame('Updated Name', $employee->name);
+        $this->assertSame($originalPassword, $employee->password);
+    }
+
+    public function test_employee_manager_field_only_accepts_manager_or_hr_users(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $notAManager = User::factory()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('startCreate')
+            ->set('name', 'Someone')
+            ->set('email', 'someone@leavedesk.test')
+            ->set('password', 'password123')
+            ->set('role', 'employee')
+            ->set('managerId', $notAManager->id)
+            ->set('joinedAt', now()->toDateString())
+            ->call('save')
+            ->assertHasErrors('managerId');
+    }
+
+    public function test_hr_can_create_a_department(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $manager = User::factory()->manager()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(Departments::class)
+            ->call('startCreate')
+            ->set('name', 'Engineering')
+            ->set('managerId', $manager->id)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('departments', [
+            'name' => 'Engineering',
+            'manager_id' => $manager->id,
+        ]);
+    }
+
+    public function test_hr_can_create_a_leave_type(): void
+    {
+        $hr = User::factory()->hr()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(LeaveTypes::class)
+            ->call('startCreate')
+            ->set('name', 'Bereavement')
+            ->set('code', 'BRV')
+            ->set('yearlyAllocationDays', 5)
+            ->set('carryForwardEnabled', false)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('leave_types', [
+            'name' => 'Bereavement',
+            'code' => 'BRV',
+            'yearly_allocation_days' => 5,
+            'carry_forward_enabled' => false,
+        ]);
+    }
+
+    public function test_creating_a_leave_type_provisions_balances_for_existing_active_employees(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $activeEmployee = User::factory()->create();
+        $inactiveEmployee = User::factory()->inactive()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(LeaveTypes::class)
+            ->call('startCreate')
+            ->set('name', 'Bereavement')
+            ->set('code', 'BRV')
+            ->set('yearlyAllocationDays', 5)
+            ->set('carryForwardEnabled', false)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $leaveType = LeaveType::where('code', 'BRV')->firstOrFail();
+
+        $this->assertDatabaseHas('leave_balances', [
+            'user_id' => $activeEmployee->id,
+            'leave_type_id' => $leaveType->id,
+            'allocated_days' => 5,
+            'year' => now()->year,
+        ]);
+        $this->assertDatabaseMissing('leave_balances', [
+            'user_id' => $inactiveEmployee->id,
+            'leave_type_id' => $leaveType->id,
+        ]);
+    }
+
+    public function test_reactivating_a_leave_type_provisions_balances_for_employees_who_were_missing_them(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $employee = User::factory()->create();
+        $leaveType = LeaveType::factory()->inactive()->create();
+
+        // Simulates the exact bug reported: the leave type existed with no
+        // balance row for this employee (e.g. it was created before this fix).
+        $this->assertDatabaseMissing('leave_balances', [
+            'user_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+        ]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(LeaveTypes::class)->call('toggleActive', $leaveType->id);
+
+        $this->assertDatabaseHas('leave_balances', [
+            'user_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'year' => now()->year,
+        ]);
+    }
+
+    public function test_sync_leave_balances_command_backfills_missing_balances(): void
+    {
+        $employee = User::factory()->create();
+        $leaveType = LeaveType::factory()->create(['yearly_allocation_days' => 12]);
+
+        $this->assertDatabaseMissing('leave_balances', [
+            'user_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+        ]);
+
+        $this->artisan('leave:sync-balances')->assertSuccessful();
+
+        $this->assertDatabaseHas('leave_balances', [
+            'user_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'allocated_days' => 12,
+            'year' => now()->year,
+        ]);
+    }
+
+    public function test_hr_can_deactivate_and_reactivate_an_employee(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $employee = User::factory()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)->call('toggleActive', $employee->id);
+        $this->assertFalse($employee->fresh()->is_active);
+
+        Livewire::test(Employees::class)->call('toggleActive', $employee->id);
+        $this->assertTrue($employee->fresh()->is_active);
+    }
+
+    public function test_hr_cannot_deactivate_the_last_active_hr_account(): void
+    {
+        $hr = User::factory()->hr()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('toggleActive', $hr->id)
+            ->assertSet('errorMessage', 'Cannot deactivate the last active HR account.');
+
+        $this->assertTrue($hr->fresh()->is_active);
+    }
+
+    public function test_hr_can_deactivate_themselves_if_another_active_hr_remains(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $otherHr = User::factory()->hr()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)->call('toggleActive', $hr->id);
+
+        $this->assertFalse($hr->fresh()->is_active);
+        $this->assertTrue($otherHr->fresh()->is_active);
+    }
+
+    public function test_new_employees_only_get_balances_for_active_leave_types(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $activeType = LeaveType::factory()->create();
+        $inactiveType = LeaveType::factory()->inactive()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('startCreate')
+            ->set('name', 'New Hire')
+            ->set('email', 'new.hire2@leavedesk.test')
+            ->set('password', 'password123')
+            ->set('role', 'employee')
+            ->set('joinedAt', now()->toDateString())
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $newEmployee = User::where('email', 'new.hire2@leavedesk.test')->firstOrFail();
+
+        $this->assertDatabaseHas('leave_balances', [
+            'user_id' => $newEmployee->id,
+            'leave_type_id' => $activeType->id,
+        ]);
+        $this->assertDatabaseMissing('leave_balances', [
+            'user_id' => $newEmployee->id,
+            'leave_type_id' => $inactiveType->id,
+        ]);
+    }
+
+    public function test_hr_can_deactivate_and_reactivate_a_department(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $department = Department::factory()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(Departments::class)->call('toggleActive', $department->id);
+        $this->assertFalse($department->fresh()->is_active);
+
+        Livewire::test(Departments::class)->call('toggleActive', $department->id);
+        $this->assertTrue($department->fresh()->is_active);
+    }
+
+    public function test_hr_can_deactivate_and_reactivate_a_leave_type(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $leaveType = LeaveType::factory()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(LeaveTypes::class)->call('toggleActive', $leaveType->id);
+        $this->assertFalse($leaveType->fresh()->is_active);
+
+        Livewire::test(LeaveTypes::class)->call('toggleActive', $leaveType->id);
+        $this->assertTrue($leaveType->fresh()->is_active);
+    }
+
+    public function test_manager_dropdown_excludes_inactive_managers_but_keeps_the_currently_assigned_one(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $activeManager = User::factory()->manager()->create(['name' => 'Active Manager']);
+        $inactiveManager = User::factory()->manager()->inactive()->create(['name' => 'Retired Manager']);
+        $employee = User::factory()->create(['manager_id' => $inactiveManager->id]);
+
+        $this->actingAs($hr);
+
+        // Editing an employee whose current manager is now inactive should still show that manager.
+        Livewire::test(Employees::class)
+            ->call('edit', $employee->id)
+            ->assertSee('Active Manager')
+            ->assertSee('Retired Manager (inactive)');
+    }
+}
