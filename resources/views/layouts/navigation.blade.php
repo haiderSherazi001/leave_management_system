@@ -15,6 +15,9 @@
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                         {{ __('Dashboard') }}
                     </x-nav-link>
+                    <x-nav-link :href="route('attendance.check-in')" :active="request()->routeIs('attendance.check-in')">
+                        {{ __('Attendance') }}
+                    </x-nav-link>
                     <x-nav-link :href="route('leave.apply')" :active="request()->routeIs('leave.apply')">
                         {{ __('Apply for Leave') }}
                     </x-nav-link>
@@ -41,6 +44,8 @@
                                     <x-dropdown-link :href="route('admin.employees')">{{ __('Employees') }}</x-dropdown-link>
                                     <x-dropdown-link :href="route('admin.departments')">{{ __('Departments') }}</x-dropdown-link>
                                     <x-dropdown-link :href="route('admin.leave-types')">{{ __('Leave Types') }}</x-dropdown-link>
+                                    <x-dropdown-link :href="route('admin.work-schedule')">{{ __('Work Schedule') }}</x-dropdown-link>
+                                    <x-dropdown-link :href="route('admin.holidays')">{{ __('Holidays') }}</x-dropdown-link>
                                 </x-slot>
                             </x-dropdown>
                         </div>
@@ -100,6 +105,9 @@
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('attendance.check-in')" :active="request()->routeIs('attendance.check-in')">
+                {{ __('Attendance') }}
+            </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('leave.apply')" :active="request()->routeIs('leave.apply')">
                 {{ __('Apply for Leave') }}
             </x-responsive-nav-link>
@@ -120,6 +128,12 @@
                 </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('admin.leave-types')" :active="request()->routeIs('admin.leave-types')">
                     {{ __('Leave Types') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('admin.work-schedule')" :active="request()->routeIs('admin.work-schedule')">
+                    {{ __('Work Schedule') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('admin.holidays')" :active="request()->routeIs('admin.holidays')">
+                    {{ __('Holidays') }}
                 </x-responsive-nav-link>
             @endif
         </div>

@@ -86,16 +86,43 @@ final class LeaveBalanceService
             return;
         }
 
+        $carriedForwardDays = $leaveType->carry_forward_enabled
+            ? $this->calculateCarryForward($userId, $leaveTypeId, $year - 1, $leaveType->carry_forward_max_days)
+            : 0.0;
+
         DB::table('leave_balances')->insert([
             'user_id' => $userId,
             'leave_type_id' => $leaveTypeId,
             'year' => $year,
             'allocated_days' => $leaveType->yearly_allocation_days,
-            'carried_forward_days' => 0,
+            'carried_forward_days' => $carriedForwardDays,
             'used_days' => 0,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+    }
+
+    /**
+     * Unused days from the previous year, floored at zero and capped at the
+     * leave type's carry_forward_max_days (uncapped if that's null). Zero if
+     * there's no balance for the previous year at all (e.g. first year of
+     * employment, or the leave type didn't exist yet).
+     */
+    private function calculateCarryForward(int $userId, int $leaveTypeId, int $previousYear, ?int $maxDays): float
+    {
+        $previousBalance = $this->find($userId, $leaveTypeId, $previousYear);
+
+        if ($previousBalance === null) {
+            return 0.0;
+        }
+
+        $leftover = (float) $previousBalance->allocated_days
+            + (float) $previousBalance->carried_forward_days
+            - (float) $previousBalance->used_days;
+
+        $leftover = max(0.0, $leftover);
+
+        return $maxDays !== null ? min($leftover, (float) $maxDays) : $leftover;
     }
 
     /**

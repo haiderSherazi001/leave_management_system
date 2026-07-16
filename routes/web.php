@@ -3,7 +3,10 @@
 use App\Http\Controllers\ProfileController;
 use App\Livewire\Admin\Departments;
 use App\Livewire\Admin\Employees;
+use App\Livewire\Admin\Holidays;
 use App\Livewire\Admin\LeaveTypes;
+use App\Livewire\Admin\WorkSchedule;
+use App\Livewire\Attendance\CheckIn;
 use App\Livewire\Leave\ApprovalQueue;
 use App\Livewire\Leave\MyRequests;
 use App\Livewire\Leave\RequestForm;
@@ -22,6 +25,8 @@ Route::middleware('auth')->group(function () {
     // Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     // Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
+    Route::get('/attendance', CheckIn::class)->name('attendance.check-in');
+
     Route::get('/leave/apply', RequestForm::class)->name('leave.apply');
     Route::get('/leave/my-requests', MyRequests::class)->name('leave.my-requests');
     Route::get('/leave/approvals', ApprovalQueue::class)->name('leave.approvals');
@@ -29,6 +34,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/admin/employees', Employees::class)->name('admin.employees');
     Route::get('/admin/departments', Departments::class)->name('admin.departments');
     Route::get('/admin/leave-types', LeaveTypes::class)->name('admin.leave-types');
+    Route::get('/admin/work-schedule', WorkSchedule::class)->name('admin.work-schedule');
+    Route::get('/admin/holidays', Holidays::class)->name('admin.holidays');
 });
 
 require __DIR__.'/auth.php';

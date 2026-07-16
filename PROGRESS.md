@@ -166,3 +166,49 @@ Planned first (user explicitly asked for a plan, not code, so that came first as
 ### Plan for next session
 
 Move to **Phase 2 — Attendance** (work schedule/holiday config + the `attendance` table, per the outline already agreed) — unless the `ProfileTest`/profile-routes situation needs addressing first.
+
+## 2026-07-15 (night) — leadership auto-approve bypass
+
+### Work done
+
+Per explicit request: `LeaveRequestService::submit()` now checks the submitting user's role in the same query that already checked `is_active` (no extra round-trip). Manager/HR submissions are inserted directly as `approved` (self as `approver_id`, a `decision_note` explaining the auto-approval, `decided_at` set) and the balance is deducted immediately via the existing `LeaveBalanceService::deductDays()` — `NewLeaveRequestNotification` is never dispatched for these. Standard employees are completely unaffected (still `pending` + manager notified). All mutations stayed plain `DB::table()` calls, no Eloquent.
+
+5 new tests (manager/HR auto-approved + balance deducted, employee flow unaffected, no notification sent for leadership self-submission). Verified for real against MySQL: a manager's self-submitted leave came back approved/self-approver/correct deduction with zero mail sent; a normal employee's submission still came back pending with the manager correctly emailed.
+
+One design call worth remembering: `approver_id` is set to the submitter themselves rather than left null, so the audit trail ("who approved this and when") still has something meaningful in it.
+
+## 2026-07-16 — Phase 1 gap audit + Phase 2 kickoff (branch: `phase-2`)
+
+### Work done today
+
+**Full audit against the spec before moving on** — re-read `LeaveDesk_Project_Details.pdf` and cross-checked against `PROGRESS.md`. Confirmed everything else in Phase 1 core is genuinely done (employees/departments/leave types/balances, online requests, approval workflow, role-scoped access, notifications). Found one real gap: **carry-forward was configurable but never applied** — `LeaveType.carry_forward_enabled`/`carry_forward_max_days` existed and `LeaveBalance.carried_forward_days` existed, but `LeaveBalanceService::ensureBalanceForYear()` hardcoded `carried_forward_days => 0` for every new row, the only place that column was ever written.
+
+**Git branch**: created and switched to `phase-2` before touching anything, per explicit request — `main` stays untouched.
+
+**Carry-forward fix**: `ensureBalanceForYear()` now looks up the user's balance for the immediately-preceding year when the leave type has carry-forward enabled, computes the leftover (`allocated + carried_forward - used`, floored at 0), and caps it at `carry_forward_max_days` (uncapped if that's left blank — treated as "no cap," not "zero," since zero would silently defeat enabling carry-forward in the first place). 5 new tests (under cap, capped, disabled, no prior-year balance, uncapped). Verified against real MySQL by simulating a prior-year balance and confirming the correctly-capped carry-forward amount.
+
+**Phase 2 — Attendance, sub-steps 1-2** (3-5 deferred to next session as agreed — auto-link into `approve()`, late-flag computation, and the FullCalendar team calendar need 1-2 solid first, and the calendar pulls in a new frontend dependency that deserves its own pass):
+
+1. **Work schedule + holidays (HR admin)**: `work_schedule` table (single company-wide row — working days, start/end time, `grace_minutes` for later late-flag use) and a `holidays` table (unique date + name). Two new HR-only admin screens following the exact CRUD pattern already established for Employees/Departments/Leave Types — schedule is a single edit form (no list), holidays get full create/edit/delete (delete, not deactivate, since nothing references a holiday's id — no history to protect, unlike employees/leave types).
+2. **`attendance` table** — employee, date, check-in/out timestamps, status (present/late/absent/on_leave), unique constraint on (user, date) so a day can't be double-recorded. Employee-facing check-in/check-out Livewire page at `/attendance`, open to every role (not HR-only) — mirrors how `/leave/apply` works for anyone. No GPS/geolocation, confirmed out of scope for this pass (matches the spec anyway, which places geo/biometric under Phase 4).
+
+**Bug found and fixed during this session**: the `Holiday` Eloquent model had a `'date' => 'date'` cast that serializes to a full datetime string (`"2026-12-25 00:00:00"`) on write — but `HolidayService` (the only thing that actually touches this table in production) always reads/writes plain `Y-m-d` strings via the query builder. A holiday created via `Holiday::factory()` in a test therefore didn't match a query-builder uniqueness check, since `'2026-12-25' != '2026-12-25 00:00:00'` as raw values. Not reachable in production (nothing calls `Holiday::create()`), but a real latent trap for future code — removed the cast entirely rather than working around it in tests.
+
+Also hit a Blade limitation: `@if`/`@disabled` directives can't be embedded directly inside a Blade component tag's attributes (`<x-primary-button @disabled($x)>`) — it breaks the component-tag compiler's boundary detection. Fixed by using bound attribute syntax instead (`:disabled="(bool) $x"`), which Blade's component attribute bag handles natively.
+
+### Verification
+
+- 13 new tests (5 carry-forward, 6 work-schedule/holiday CRUD + access control, 7 attendance check-in/out) — full suite: 81/81 passing.
+- Real MySQL + HTTP throughout: carry-forward amount confirmed by simulating a prior year and checking the capped result directly; schedule save and holiday create/isHoliday confirmed via tinker against MySQL, then confirmed the HR admin pages actually render that saved data; a real employee checked in and out through the actual service, confirmed times displayed correctly on `/attendance`, confirmed check-in is blocked on the same day (idempotency) and check-out is blocked without a prior check-in.
+
+### Issues and blockers
+
+- Still open, unrelated to today: `ProfileTest`'s underlying routes situation (flagged previously, not touched).
+- New, minor: bound-value display can't be verified via `curl`/`grep` for Livewire `wire:model` inputs (Livewire 3 doesn't bake the value into a static `value="..."` HTML attribute — it hydrates client-side via JS). Confirmed indirectly instead (200 response with no error means `mount()` successfully pre-filled from saved data; the underlying service logic was independently confirmed via tinker). Not a product issue, just a limitation of verifying without a real browser in this environment.
+
+### Plan for next session
+
+**Phase 2 sub-steps 3-5**, in order:
+1. Auto-link: extend `LeaveRequestService::approve()` to write into `attendance` for the approved date range (status `on_leave`) — the spec's "single source of truth" requirement.
+2. Late-arrival flag computation against the work schedule (`grace_minutes` is already in place, unused until now).
+3. Team calendar (FullCalendar JS — new frontend dependency, not yet installed).
