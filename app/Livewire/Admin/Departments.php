@@ -40,7 +40,21 @@ class Departments extends Component
                 'nullable',
                 'integer',
                 Rule::exists('users', 'id')->where(fn ($query) => $query->whereIn('role', ['manager', 'hr'])->where('is_active', true)),
+                // A manager can only head one department at a time — null values
+                // are exempt automatically since the 'nullable' rule above skips
+                // the rest of the chain when managerId is empty.
+                Rule::unique('departments', 'manager_id')->ignore($this->editingId),
             ],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function messages(): array
+    {
+        return [
+            'managerId.unique' => 'This manager already heads another department.',
         ];
     }
 

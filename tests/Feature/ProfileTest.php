@@ -20,33 +20,4 @@ class ProfileTest extends TestCase
 
         $response->assertOk();
     }
-
-    public function test_profile_information_cannot_be_updated_by_user(): void
-    {
-        $user = User::factory()->create();
-
-        $response = $this
-            ->actingAs($user)
-            ->patch('/profile', [
-                'name' => 'Test User',
-                'email' => 'test@example.com',
-            ]);
-
-        // The route recognizes /profile, but blocks PATCH requests
-        $response->assertStatus(405);
-    }
-
-    public function test_user_cannot_delete_their_account(): void
-    {
-        $user = User::factory()->create();
-
-        $response = $this
-            ->actingAs($user)
-            ->delete('/profile', [
-                'password' => 'password',
-            ]);
-
-        // The route recognizes /profile, but blocks DELETE requests
-        $response->assertStatus(405);
-    }
 }

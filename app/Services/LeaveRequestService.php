@@ -247,9 +247,14 @@ final class LeaveRequestService
     }
 
     /**
-     * Pending requests visible to a manager: their direct reports, plus anyone
-     * in a department they head. Phase 1 scope is manager-only — HR does not
-     * see this queue (multi-level approval is Phase 4).
+     * Pending requests visible to a manager: their direct reports, plus
+     * anyone whose department is managed by them but who has no direct
+     * manager of their own. An employee's direct manager_id always takes
+     * priority over their department's manager — the department manager is
+     * a fallback, not a second, parallel approver — so each employee has
+     * exactly one assigned manager, never two. Phase 1 scope is
+     * manager-only — HR does not see this queue (multi-level approval is
+     * Phase 4).
      *
      * @return array<int, object>
      */
@@ -262,7 +267,10 @@ final class LeaveRequestService
             ->where('leave_requests.status', LeaveRequestStatus::Pending->value)
             ->where(function ($query) use ($managerId): void {
                 $query->where('users.manager_id', $managerId)
-                    ->orWhere('departments.manager_id', $managerId);
+                    ->orWhere(function ($query) use ($managerId): void {
+                        $query->whereNull('users.manager_id')
+                            ->where('departments.manager_id', $managerId);
+                    });
             })
             ->select(
                 'leave_requests.id',
@@ -280,8 +288,53 @@ final class LeaveRequestService
     }
 
     /**
-     * Notifies the employee's direct manager and/or department head (same
-     * "assigned manager" join used by LeaveRequestPolicy and pendingForApprover).
+     * Approved requests for a manager's team (direct reports, plus anyone
+     * whose department they manage but who has no direct manager of their
+     * own — same priority rule as pendingForApprover(): direct manager_id
+     * always wins over the department's manager) that overlap the given
+     * date range — the data source for the team calendar. Sourced from
+     * leave_requests rather than attendances: it's the one row-per-request
+     * record with the leave type, half-day flag, and reason a calendar
+     * event needs, and it doesn't depend on the best-effort attendance
+     * auto-link having succeeded.
+     *
+     * @return array<int, object>
+     */
+    public function approvedForTeamBetween(int $managerId, string $start, string $end): array
+    {
+        return DB::table('leave_requests')
+            ->join('users', 'users.id', '=', 'leave_requests.user_id')
+            ->leftJoin('departments', 'departments.id', '=', 'users.department_id')
+            ->join('leave_types', 'leave_types.id', '=', 'leave_requests.leave_type_id')
+            ->where('leave_requests.status', LeaveRequestStatus::Approved->value)
+            ->where('leave_requests.start_date', '<=', $end)
+            ->where('leave_requests.end_date', '>=', $start)
+            ->where(function ($query) use ($managerId): void {
+                $query->where('users.manager_id', $managerId)
+                    ->orWhere(function ($query) use ($managerId): void {
+                        $query->whereNull('users.manager_id')
+                            ->where('departments.manager_id', $managerId);
+                    });
+            })
+            ->select(
+                'leave_requests.id',
+                'users.name as employee_name',
+                'leave_types.name as leave_type_name',
+                'leave_requests.start_date',
+                'leave_requests.end_date',
+                'leave_requests.is_half_day',
+                'leave_requests.reason',
+            )
+            ->orderBy('leave_requests.start_date')
+            ->get()
+            ->all();
+    }
+
+    /**
+     * Notifies the employee's one assigned manager — their direct manager_id
+     * if set, otherwise their department's manager (same priority rule used
+     * by LeaveRequestPolicy and pendingForApprover(): the department manager
+     * is a fallback, not a second notified manager).
      */
     private function notifyManagersOfNewRequest(
         int $leaveRequestId,
@@ -302,31 +355,26 @@ final class LeaveRequestService
             return;
         }
 
-        $managerIds = array_unique(array_filter([
-            $assignment->direct_manager_id,
-            $assignment->department_manager_id,
-        ]));
+        $managerId = $assignment->direct_manager_id ?? $assignment->department_manager_id;
 
-        if ($managerIds === []) {
+        if ($managerId === null) {
             return;
         }
 
         $employeeName = DB::table('users')->where('id', $employeeId)->value('name') ?? 'An employee';
         $leaveTypeName = DB::table('leave_types')->where('id', $leaveTypeId)->value('name') ?? 'Leave';
 
-        foreach ($managerIds as $managerId) {
-            $manager = User::find($managerId);
+        $manager = User::find($managerId);
 
-            $manager?->notify(new NewLeaveRequestNotification(
-                leaveRequestId: $leaveRequestId,
-                employeeName: $employeeName,
-                leaveTypeName: $leaveTypeName,
-                startDate: $startDate->toDateString(),
-                endDate: $endDate->toDateString(),
-                totalDays: $totalDays,
-                reason: $reason,
-            ));
-        }
+        $manager?->notify(new NewLeaveRequestNotification(
+            leaveRequestId: $leaveRequestId,
+            employeeName: $employeeName,
+            leaveTypeName: $leaveTypeName,
+            startDate: $startDate->toDateString(),
+            endDate: $endDate->toDateString(),
+            totalDays: $totalDays,
+            reason: $reason,
+        ));
     }
 
     /**

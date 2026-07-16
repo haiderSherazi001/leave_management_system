@@ -53,7 +53,27 @@ class Employees extends Component
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($this->editingId)],
             'password' => [$this->editingId === null ? 'required' : 'nullable', 'min:8'],
             'role' => ['required', Rule::enum(UserRole::class)],
-            'departmentId' => ['nullable', 'integer', Rule::exists('departments', 'id')->where('is_active', true)],
+            'departmentId' => [
+                'nullable',
+                'integer',
+                Rule::exists('departments', 'id')->where('is_active', true),
+                // A department has exactly one manager (departments.manager_id).
+                // A manager-role employee may only be placed into a department
+                // that has no manager yet, or the one they already head —
+                // never a department someone else already manages, which would
+                // otherwise leave the same department pointing at two managers.
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value === null || $this->role !== UserRole::Manager->value) {
+                        return;
+                    }
+
+                    $currentManagerId = DB::table('departments')->where('id', $value)->value('manager_id');
+
+                    if ($currentManagerId !== null && $currentManagerId !== $this->editingId) {
+                        $fail('This department already has a different manager assigned.');
+                    }
+                },
+            ],
             'managerId' => [
                 'nullable',
                 'integer',

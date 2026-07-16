@@ -27,8 +27,10 @@ class LeaveRequestPolicy
     }
 
     /**
-     * A manager is "assigned" to an employee either directly (users.manager_id)
-     * or as the head of the employee's department (departments.manager_id).
+     * A manager is "assigned" to an employee via the employee's direct
+     * manager_id; the employee's department manager only applies as a
+     * fallback when the employee has no direct manager of their own — an
+     * employee always has exactly one assigned manager, never two.
      */
     private function isAssignedManagerOf(User $user, LeaveRequest $leaveRequest): bool
     {
@@ -41,7 +43,10 @@ class LeaveRequestPolicy
             ->where('employees.id', $leaveRequest->user_id)
             ->where(function ($query) use ($user): void {
                 $query->where('employees.manager_id', $user->id)
-                    ->orWhere('departments.manager_id', $user->id);
+                    ->orWhere(function ($query) use ($user): void {
+                        $query->whereNull('employees.manager_id')
+                            ->where('departments.manager_id', $user->id);
+                    });
             })
             ->exists();
     }

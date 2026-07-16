@@ -55,13 +55,19 @@ class LeaveRequestNotificationTest extends TestCase
         );
     }
 
-    public function test_both_direct_manager_and_department_head_are_notified_when_different(): void
+    /**
+     * An employee's direct manager_id always takes priority over their
+     * department's manager — the department manager is a fallback for
+     * employees with no direct manager, never a second, parallel approver.
+     * So when both are set and differ, only the direct manager is notified.
+     */
+    public function test_only_direct_manager_is_notified_when_department_manager_differs(): void
     {
         Notification::fake();
 
         $directManager = User::factory()->manager()->create();
-        $departmentHead = User::factory()->manager()->create();
-        $department = Department::factory()->create(['manager_id' => $departmentHead->id]);
+        $departmentManager = User::factory()->manager()->create();
+        $department = Department::factory()->create(['manager_id' => $departmentManager->id]);
         $employee = User::factory()->create([
             'manager_id' => $directManager->id,
             'department_id' => $department->id,
@@ -88,7 +94,45 @@ class LeaveRequestNotificationTest extends TestCase
         );
 
         Notification::assertSentTo($directManager, NewLeaveRequestNotification::class);
-        Notification::assertSentTo($departmentHead, NewLeaveRequestNotification::class);
+        Notification::assertNotSentTo($departmentManager, NewLeaveRequestNotification::class);
+    }
+
+    /**
+     * With no direct manager assigned, the department's manager is the
+     * fallback approver and receives the notification.
+     */
+    public function test_department_manager_is_notified_when_employee_has_no_direct_manager(): void
+    {
+        Notification::fake();
+
+        $departmentManager = User::factory()->manager()->create();
+        $department = Department::factory()->create(['manager_id' => $departmentManager->id]);
+        $employee = User::factory()->create([
+            'manager_id' => null,
+            'department_id' => $department->id,
+        ]);
+        $leaveType = LeaveType::factory()->create();
+
+        LeaveBalance::factory()->create([
+            'user_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'year' => now()->year,
+            'allocated_days' => 10,
+            'used_days' => 0,
+        ]);
+
+        $service = $this->app->make(LeaveRequestService::class);
+
+        $service->submit(
+            userId: $employee->id,
+            leaveTypeId: $leaveType->id,
+            startDate: now()->addDays(5)->toImmutable(),
+            endDate: now()->addDays(6)->toImmutable(),
+            isHalfDay: false,
+            reason: 'Trip',
+        );
+
+        Notification::assertSentTo($departmentManager, NewLeaveRequestNotification::class);
     }
 
     public function test_no_notification_sent_when_employee_has_no_assigned_manager(): void

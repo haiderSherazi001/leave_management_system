@@ -247,3 +247,68 @@ The `calculateTotalDays()` over-charging gap (above) — not originally in this 
 ### Plan for next session
 
 **Phase 2 sub-step 5 — team calendar**: manager-facing read-only view (same "assigned manager" team as `pendingForApprover()`) showing approved leave and holidays, using FullCalendar JS (not yet installed — check `package.json` first). This is a different shape of work than 3-4 (new frontend dependency, Vite bundling, JS/Livewire interop for event data) rather than a same-pattern service extension.
+
+## 2026-07-16 — Phase 2 sub-step 5: team calendar (branch: `phase-2`)
+
+### Work done
+
+**FullCalendar integration**, planned architecture-first (see `CalendarService`/`TeamCalendar` design decisions below) then implemented exactly as approved:
+
+- Added `@fullcalendar/core` + `@fullcalendar/daygrid` as real `dependencies` (not `devDependencies` — runtime browser code). No `timegrid`/`list`/`interaction` plugins — this calendar is read-only and all-day-only, so none of those add value.
+- New dedicated Vite entry `resources/js/team-calendar.js`, added to `vite.config.js`'s `input` and loaded via its own `@vite()` call directly in `team-calendar.blade.php` — the first departure from this project's "one global JS bundle for every page" convention, so FullCalendar's code isn't shipped to pages that never use it.
+- `LeaveRequestService::approvedForTeamBetween(int $managerId, string $start, string $end)` — same `users.manager_id` / `departments.manager_id` OR-join as `pendingForApprover()`, filtered to `status = Approved` plus a date-range overlap instead of `status = Pending`.
+- `HolidayService::betweenDates(string $start, string $end)` — small addition alongside the existing `list()`/`isHoliday()`.
+- New `App\Services\CalendarService::teamEventsBetween()` — merges both sources into FullCalendar-ready event objects. Deliberately sources leave events from `leave_requests`, not `attendances`: one row per request has everything a calendar event needs (date range, leave type, half-day flag, reason), whereas `attendances` is a one-row-per-day, best-effort projection written outside `approve()`'s DB transaction — not something a read path should treat as ground truth. Handles FullCalendar's all-day-event-`end`-is-exclusive rule once, centrally (`end_date + 1 day`), rather than leaving it to be rediscovered by every caller.
+- New `App\Livewire\Leave\TeamCalendar` component (`mount()` uses the exact `abort_unless(Auth::user()->isManager(), 403)` pattern from `ApprovalQueue`, no new middleware) at `/leave/team-calendar`, plus a nav link (desktop + mobile) gated the same way as the existing "Approvals" link.
+- **JS/Livewire bridge**: the calendar container div is `wire:ignore`d (FullCalendar owns and continuously mutates its own DOM; without `wire:ignore` any unrelated Livewire re-render would let Livewire's morph step fight or destroy it). Deliberately **no Alpine `x-data`** for this widget — this project's `resources/js/app.js` boots a standalone `alpinejs` npm instance separate from the Alpine that Livewire 3 auto-injects internally, and no existing `x-data` usage in the codebase has ever exercised `$wire` magics, so which instance binds a new node isn't something to depend on. Bridges with plain vanilla JS against `window.Livewire`'s own JS API instead: initial paint comes from `@js($initialEvents)` embedded server-side; navigating months fires FullCalendar's `datesSet` callback, which calls `Livewire.find(wireId).call('loadEventsForRange', ...)`; the component dispatches `calendar-events-updated` as a browser event (no public property tied to the calendar markup), and a `Livewire.on()` listener swaps data via FullCalendar's own `removeAllEvents()`/`addEventSource()` — never a DOM re-render, so the currently-viewed month/scroll state is never lost.
+
+### Verification
+
+- 7 new tests (`TeamCalendarTest`) — access control (manager 200 / employee 403), direct-report scoping, department-head scoping, pending requests excluded, holidays included regardless of team, the exclusive-end-date mapping, and the `loadEventsForRange` action dispatching the browser event — full suite: 98/98 passing.
+- `npm run build` succeeds with `team-calendar.js` bundled as its own chunk (confirms the new Vite entry point is wired correctly).
+- Real MySQL + HTTP: seeded two managers with one employee each (one via direct `manager_id`, one via `departments.manager_id`) plus approved leave and a holiday, confirmed `CalendarService::teamEventsBetween()` returns only the correct manager's employee's leave (never the other manager's) with the holiday visible to both, and the end-date-exclusivity math correct. Logged in as the manager over real HTTP (`php artisan serve` + `curl`, cookie-jar login flow), confirmed `/leave/team-calendar` returns 200 with the `#team-calendar` div, the scoped employee's leave title embedded in the initial-events JSON, no leak of the other manager's employee, and the `team-calendar.js` script tag present; confirmed a plain employee gets 403. All synthetic verification data removed from the dev database afterward.
+
+### Issues and blockers
+
+- Still open, unrelated to today: `ProfileTest`'s underlying routes situation.
+- None new. Phase 2 is now complete (sub-steps 1-5 all done on branch `phase-2`).
+
+### Plan for next session
+
+Phase 2 is done. Next is **Phase 3 — Reporting** (scheduled HR reports, Excel/PDF export via Laravel Excel + DomPDF, dashboards), per the phase order in `CLAUDE.md`. Neither package is installed yet — check `composer.json` before assuming anything is wired up.
+
+## 2026-07-16 — Two production bugs found via manual testing, fixed (branch: `phase-2`)
+
+### Bugs found and fixed
+
+**Bug 1 — an employee's leave request was visible to two different managers.** Reported as "all managers can see all employee's requests." Traced with real dev-DB data: employee `test employee` (`#15`) had `manager_id = 14` directly, but `department_id` pointing to Engineering, headed by a *different* manager (`#1`, Morgan). Every team-scoping query (`pendingForApprover()`, `approvedForTeamBetween()`, `LeaveRequestPolicy::isAssignedManagerOf()`, `notifyManagersOfNewRequest()`) used `users.manager_id = X OR departments.manager_id = X` — both branches were legitimately true for two different manager IDs, so both managers saw (and could act on) the same request. This was **not** a SQL-precedence bug — the OR was already correctly closure-wrapped in every one of those places — it was the OR itself being too permissive by design. Confirmed by initially proposing the "missing closure" fix, reading the actual code, and showing it was already there before touching anything.
+
+Fixed by making the relationship a strict priority instead of an OR: an employee's direct `manager_id` always wins; the department's manager only applies as a fallback when the employee has no direct manager of their own (`users.manager_id = X OR (users.manager_id IS NULL AND departments.manager_id = X)`). Applied identically in all four places above. There is no separate "department head" role or concept in this project (confirmed with the user) — `departments.manager_id` is just a Manager-role user referenced by a department, same category as `users.manager_id`, not a parallel authority.
+
+**Bug 2 — the same manager could be assigned to head more than one department**, with nothing to stop it. Added a `Rule::unique('departments', 'manager_id')->ignore($this->editingId)` validation rule to `Departments::rules()` (Livewire component, not the service layer — matches this project's existing convention of validation living in the component, not `DepartmentService`), with a friendly custom message via `messages()`. Multiple departments having *no* manager (`null`) remains fine — the `nullable` rule short-circuits the rest of the chain for empty values, so uniqueness only kicks in once an actual manager is selected.
+
+### Verification
+
+- 6 new/changed tests: `AdminManagementTest` gained 3 (rejects a manager already heading another department, editing a department can keep its own manager, multiple departments can have no manager); `LeaveRequestNotificationTest`'s old "both direct manager and department head are notified when different" test (which asserted the buggy dual-notify behavior) was replaced with two tests proving only the resolved single manager is notified either way; `TeamCalendarTest` gained a direct regression test reproducing the exact `#15` scenario and asserting the department manager sees nothing while the direct manager does. Full suite: 103/103 passing.
+- Reproduced the reported leak first via a full end-to-end Livewire-UI-driven test (real `Employees`/`Departments`/`RequestForm`/`ApprovalQueue` components, not raw DB inserts) before touching any code, to rule out a state-reset bug in the admin forms — that flow was clean, which is what pointed at the OR-based query logic itself rather than a component bug.
+- Real MySQL: re-ran the exact production scenario from the dev database (`Morgan #1` / `manager 1 #14` / `test employee #15`) through `CalendarService::teamEventsBetween()` and `LeaveRequestService::pendingForApprover()` before and after the fix — confirmed Morgan no longer sees `test employee`'s request, only manager `#14` does (and Morgan still correctly sees `#14`'s *own* request, since `#14` has no direct manager and falls back to their department head, which is the intended fallback case, not a leak).
+- Real HTTP: logged in as HR, confirmed `/admin/departments` still renders correctly with the manager column populated after the validation change.
+
+### Issues and blockers
+
+- Still open, unrelated to today: `ProfileTest`'s underlying routes situation.
+
+### Follow-up same day — Bug 2 wasn't fully closed
+
+The `Departments` form uniqueness check (above) only stopped a manager being selected as the official head of two departments via `departments.manager_id`. It didn't stop a **second** manager-role employee from being placed into an already-headed department via their own `department_id` on the `Employees` form — checking the dev database directly still showed Engineering (headed by `Morgan #1`) with two other Manager-role users (`#14`, `#16`) also carrying `department_id = 1`, which is exactly "two managers for one department" from the data's perspective.
+
+Fixed with a closure validation rule on `Employees::rules()`'s `departmentId`: when `role = Manager`, the chosen department's `manager_id` must be either null (department has no manager yet) or equal to the employee's own id (editing the department they already head) — otherwise `departmentId` fails validation. Non-manager roles are unaffected; a regular employee can still be placed into an already-managed department, since the rule only exists to stop a *second manager* from landing there.
+
+Also corrected the existing bad data this surfaced: cleared `department_id` (set to `null`, not deleted) on the two stray manager accounts (`#14`, `#16`) that were pointing at Engineering without being its manager.
+
+- 5 new tests in `AdminManagementTest`: a second manager is rejected from an already-headed department, a manager can be placed into an unheaded department, a manager keeps their own department on edit, a regular employee is unaffected. Full suite: 107/107 passing.
+- Real MySQL: confirmed via tinker that only `Morgan (#1)` — the department's actual `manager_id` — remains tied to `department_id = 1` after cleanup. Real HTTP: `/admin/employees` still renders correctly post-fix.
+
+### Plan for next session
+
+Same as before — **Phase 3, Reporting**, is next. No outstanding work from today's bug fixes.

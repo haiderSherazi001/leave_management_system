@@ -47,4 +47,16 @@ final class HolidayService
     {
         return DB::table('holidays')->where('date', $date)->exists();
     }
+
+    /**
+     * @return array<int, object>
+     */
+    public function betweenDates(string $start, string $end): array
+    {
+        return DB::table('holidays')
+            ->whereBetween('date', [$start, $end])
+            ->orderBy('date')
+            ->get()
+            ->all();
+    }
 }

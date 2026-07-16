@@ -28,6 +28,9 @@
                         <x-nav-link :href="route('leave.approvals')" :active="request()->routeIs('leave.approvals')">
                             {{ __('Approvals') }}
                         </x-nav-link>
+                        <x-nav-link :href="route('leave.team-calendar')" :active="request()->routeIs('leave.team-calendar')">
+                            {{ __('Team Calendar') }}
+                        </x-nav-link>
                     @endif
                     @if (Auth::user()->isHr())
                         <div class="hidden sm:flex sm:items-center h-full">
@@ -117,6 +120,9 @@
             @if (Auth::user()->isManager())
                 <x-responsive-nav-link :href="route('leave.approvals')" :active="request()->routeIs('leave.approvals')">
                     {{ __('Approvals') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('leave.team-calendar')" :active="request()->routeIs('leave.team-calendar')">
+                    {{ __('Team Calendar') }}
                 </x-responsive-nav-link>
             @endif
             @if (Auth::user()->isHr())

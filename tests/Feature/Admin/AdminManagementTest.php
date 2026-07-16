@@ -11,6 +11,7 @@ use App\Models\Department;
 use App\Models\LeaveType;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -140,6 +141,94 @@ class AdminManagementTest extends TestCase
             ->assertHasErrors('managerId');
     }
 
+    public function test_a_second_manager_cannot_be_placed_into_a_department_that_already_has_one(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $headOfEngineering = User::factory()->manager()->create();
+        $department = Department::factory()->create(['name' => 'Engineering', 'manager_id' => $headOfEngineering->id]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('startCreate')
+            ->set('name', 'Second Manager')
+            ->set('email', 'second.manager@leavedesk.test')
+            ->set('password', 'password123')
+            ->set('role', 'manager')
+            ->set('departmentId', $department->id)
+            ->set('joinedAt', now()->toDateString())
+            ->call('save')
+            ->assertHasErrors('departmentId');
+
+        $this->assertDatabaseMissing('users', ['email' => 'second.manager@leavedesk.test']);
+    }
+
+    public function test_a_manager_can_be_placed_into_a_department_with_no_manager_yet(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $department = Department::factory()->create(['name' => 'Sales', 'manager_id' => null]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('startCreate')
+            ->set('name', 'Sales Manager')
+            ->set('email', 'sales.manager@leavedesk.test')
+            ->set('password', 'password123')
+            ->set('role', 'manager')
+            ->set('departmentId', $department->id)
+            ->set('joinedAt', now()->toDateString())
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('users', ['email' => 'sales.manager@leavedesk.test', 'department_id' => $department->id]);
+    }
+
+    public function test_a_manager_can_keep_their_own_department_assignment_when_editing(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $manager = User::factory()->manager()->create();
+        $department = Department::factory()->create(['name' => 'Engineering', 'manager_id' => $manager->id]);
+        DB::table('users')->where('id', $manager->id)->update(['department_id' => $department->id]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('edit', $manager->id)
+            ->set('name', 'Renamed Manager')
+            ->set('departmentId', $department->id)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('users', ['id' => $manager->id, 'name' => 'Renamed Manager', 'department_id' => $department->id]);
+    }
+
+    /**
+     * Non-manager roles (employee/hr) are unaffected — this rule only
+     * guards against a second manager landing in an already-headed department.
+     */
+    public function test_a_regular_employee_can_still_be_placed_into_an_already_managed_department(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $headOfEngineering = User::factory()->manager()->create();
+        $department = Department::factory()->create(['name' => 'Engineering', 'manager_id' => $headOfEngineering->id]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('startCreate')
+            ->set('name', 'Regular Employee')
+            ->set('email', 'regular.employee@leavedesk.test')
+            ->set('password', 'password123')
+            ->set('role', 'employee')
+            ->set('departmentId', $department->id)
+            ->set('joinedAt', now()->toDateString())
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('users', ['email' => 'regular.employee@leavedesk.test', 'department_id' => $department->id]);
+    }
+
     public function test_hr_can_create_a_department(): void
     {
         $hr = User::factory()->hr()->create();
@@ -158,6 +247,63 @@ class AdminManagementTest extends TestCase
             'name' => 'Engineering',
             'manager_id' => $manager->id,
         ]);
+    }
+
+    public function test_a_manager_cannot_be_assigned_to_head_two_departments(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $manager = User::factory()->manager()->create();
+        Department::factory()->create(['name' => 'Engineering', 'manager_id' => $manager->id]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Departments::class)
+            ->call('startCreate')
+            ->set('name', 'Sales')
+            ->set('managerId', $manager->id)
+            ->call('save')
+            ->assertHasErrors('managerId');
+
+        $this->assertDatabaseMissing('departments', ['name' => 'Sales']);
+    }
+
+    public function test_editing_a_department_can_keep_its_own_manager(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $manager = User::factory()->manager()->create();
+        $department = Department::factory()->create(['name' => 'Engineering', 'manager_id' => $manager->id]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Departments::class)
+            ->call('edit', $department->id)
+            ->set('name', 'Engineering Renamed')
+            ->set('managerId', $manager->id)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('departments', [
+            'id' => $department->id,
+            'name' => 'Engineering Renamed',
+            'manager_id' => $manager->id,
+        ]);
+    }
+
+    public function test_multiple_departments_can_have_no_manager_assigned(): void
+    {
+        $hr = User::factory()->hr()->create();
+        Department::factory()->create(['name' => 'Engineering', 'manager_id' => null]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Departments::class)
+            ->call('startCreate')
+            ->set('name', 'Sales')
+            ->set('managerId', null)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('departments', ['name' => 'Sales', 'manager_id' => null]);
     }
 
     public function test_hr_can_create_a_leave_type(): void

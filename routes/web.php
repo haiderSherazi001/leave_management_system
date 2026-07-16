@@ -10,6 +10,7 @@ use App\Livewire\Attendance\CheckIn;
 use App\Livewire\Leave\ApprovalQueue;
 use App\Livewire\Leave\MyRequests;
 use App\Livewire\Leave\RequestForm;
+use App\Livewire\Leave\TeamCalendar;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -30,6 +31,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/leave/apply', RequestForm::class)->name('leave.apply');
     Route::get('/leave/my-requests', MyRequests::class)->name('leave.my-requests');
     Route::get('/leave/approvals', ApprovalQueue::class)->name('leave.approvals');
+    Route::get('/leave/team-calendar', TeamCalendar::class)->name('leave.team-calendar');
 
     Route::get('/admin/employees', Employees::class)->name('admin.employees');
     Route::get('/admin/departments', Departments::class)->name('admin.departments');
