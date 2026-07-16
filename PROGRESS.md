@@ -212,3 +212,38 @@ Also hit a Blade limitation: `@if`/`@disabled` directives can't be embedded dire
 1. Auto-link: extend `LeaveRequestService::approve()` to write into `attendance` for the approved date range (status `on_leave`) — the spec's "single source of truth" requirement.
 2. Late-arrival flag computation against the work schedule (`grace_minutes` is already in place, unused until now).
 3. Team calendar (FullCalendar JS — new frontend dependency, not yet installed).
+
+## 2026-07-16 — Phase 2 sub-steps 3-4: auto-link + late-arrival flag (branch: `phase-2`)
+
+### Work done
+
+**Sub-step 3 — auto-link approved leave into attendance**: `LeaveRequestService::approve()` now writes an `on_leave` attendance row for every *working* day in the approved range (right after the balance-deduction transaction commits, same as the notification dispatch — a failure here can't roll back a real approval). Weekends and configured holidays are skipped via a new `WorkScheduleService::isWorkingDay(string $date): bool` (holiday check first, then weekday-vs-configured-working-days, defaulting to "yes, working day" if no schedule is configured yet so nothing's blocked on setup order).
+
+**Sub-step 4 — late-arrival flag**: `AttendanceService::checkIn()` now compares the check-in timestamp against `work_schedule.start_time + grace_minutes` and records `present` or `late` accordingly (still defaults to `present` if no schedule exists yet).
+
+**A real correctness gap surfaced by this work, not just these two sub-steps**: `LeaveRequestService::calculateTotalDays()` previously counted every calendar day in a multi-day request, including weekends and holidays — meaning a request spanning a public holiday was silently over-charging the employee's balance for a day they were never scheduled to work. Fixed using the same `isWorkingDay()` check, so balance deduction and attendance auto-link now agree on what a "day of leave" actually means. Also added a guard: a request whose entire range is non-working days is now rejected outright ("The selected date range does not include any working days") rather than silently creating a zero-day, balance-free leave request.
+
+**Timezone correctness (PKT)**: the app was running on Laravel's default `UTC`. Since check-in/late-flag comparisons are now time-of-day-sensitive, this actually mattered. Set `config('app.timezone')` to `Asia/Karachi` (via `APP_TIMEZONE` in `.env`, defaulting there if unset) and added a `timezone` entry to the MySQL connection config (`DB_TIMEZONE=+05:00` — a fixed offset rather than a named zone, since PKT has no DST and a fixed offset doesn't depend on MySQL's timezone tables being populated, which many installs don't have). Verified both PHP's `now()` and MySQL's session `time_zone` report the same offset.
+
+**The other three edge cases raised before starting this work**, and how each ended up handled:
+- **Holiday spanning leave / double-counting**: covered by the `calculateTotalDays()` fix above — the holiday is excluded from both the balance charge and the attendance write, so it's never counted against the employee twice (or once, incorrectly).
+- **Half-day leave + still checking in**: `status` stays `on_leave` (the authoritative record for that day) even if the employee checks in — `markOnLeave()` never touches `check_in_at`/`check_out_at`, and `checkIn()` explicitly won't downgrade an existing `on_leave` status. The check-in timestamp is still recorded factually alongside it. Verified in both directions (leave approved before check-in, and check-in before a retroactive approval) — same end state either way.
+- **Idempotency on retroactive approval**: `markOnLeave()` does a check-then-act (SELECT, then UPDATE-or-INSERT) rather than a blind insert, so it can be called any number of times for the same user+date without tripping the `(user_id, date)` unique constraint. Separately, `approve()` already refuses a second approval on the same request before the attendance loop even runs, so the literal "double-click approve" scenario can't reach it twice for that request anyway.
+
+### Verification
+
+- 17 new tests (5 auto-link/holiday/idempotency in a new `AttendanceAutoLinkTest`, 6 late-flag/timezone in `AttendanceCheckInTest`) — full suite: 91/91 passing.
+- Real MySQL + HTTP: confirmed PHP and MySQL both report `+05:00`/`Asia/Karachi`; approved a Friday-through-Monday leave request and confirmed only Friday and Monday got `on_leave` attendance rows (weekend skipped) and only 2 days were charged instead of 4; checked in a real employee at the actual current time and got `late` (correctly, given it was well past the configured start+grace); approved a half-day leave and then checked the same employee in — confirmed `status` stayed `on_leave` with `check_in_at` recorded alongside it.
+
+### Bugs found and fixed
+
+The `calculateTotalDays()` over-charging gap (above) — not originally in this session's plan, but surfaced directly by the "overlapping holiday" edge case and fixed as part of the same change, since attendance auto-link and balance deduction needed to agree on what counts as a working day anyway.
+
+### Issues and blockers
+
+- Still open, unrelated to today: `ProfileTest`'s underlying routes situation.
+- Sub-step 5 (team calendar) was **not** attempted this session — it wasn't authorized in this pass (the user OK'd sub-steps 3-4 specifically) and needs a new frontend dependency (FullCalendar) that deserves its own session anyway.
+
+### Plan for next session
+
+**Phase 2 sub-step 5 — team calendar**: manager-facing read-only view (same "assigned manager" team as `pendingForApprover()`) showing approved leave and holidays, using FullCalendar JS (not yet installed — check `package.json` first). This is a different shape of work than 3-4 (new frontend dependency, Vite bundling, JS/Livewire interop for event data) rather than a same-pattern service extension.

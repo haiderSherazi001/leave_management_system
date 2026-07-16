@@ -19,15 +19,34 @@ final class LeaveRequestService
 {
     public function __construct(
         private readonly LeaveBalanceService $balances,
+        private readonly WorkScheduleService $schedule,
+        private readonly AttendanceService $attendance,
     ) {}
 
+    /**
+     * Half-day is always exactly 0.5 (it's one explicit chosen day). For a
+     * multi-day range, only working days count — weekends and configured
+     * holidays are excluded so a request spanning a holiday doesn't consume
+     * balance for a day the employee wasn't scheduled to work anyway.
+     */
     public function calculateTotalDays(CarbonImmutable $startDate, CarbonImmutable $endDate, bool $isHalfDay): float
     {
         if ($isHalfDay) {
             return 0.5;
         }
 
-        return (float) $startDate->diffInDays($endDate) + 1;
+        $days = 0.0;
+        $cursor = $startDate;
+
+        while ($cursor->lessThanOrEqualTo($endDate)) {
+            if ($this->schedule->isWorkingDay($cursor->toDateString())) {
+                $days++;
+            }
+
+            $cursor = $cursor->addDay();
+        }
+
+        return $days;
     }
 
     public function submit(
@@ -61,6 +80,11 @@ final class LeaveRequestService
         }
 
         $totalDays = $this->calculateTotalDays($startDate, $endDate, $isHalfDay);
+
+        if ($totalDays <= 0.0) {
+            throw new DomainException('The selected date range does not include any working days.');
+        }
+
         $year = $startDate->year;
         $remaining = $this->balances->remainingDays($userId, $leaveTypeId, $year);
 
@@ -165,7 +189,8 @@ final class LeaveRequestService
             );
         });
 
-        // Outside the transaction: a notification failure must never roll back a real approval.
+        // Outside the transaction: neither of these must be able to roll back a real approval.
+        $this->linkApprovedLeaveToAttendance($leaveRequest);
         $this->notifyEmployeeOfDecision($leaveRequest, $approver, $note, LeaveRequestStatus::Approved);
     }
 
@@ -301,6 +326,29 @@ final class LeaveRequestService
                 totalDays: $totalDays,
                 reason: $reason,
             ));
+        }
+    }
+
+    /**
+     * Auto-links approved leave into attendance so it's the single source of
+     * truth (spec requirement). Only working days get an on_leave record —
+     * skipping weekends/holidays means this never collides with a real
+     * check-in on a day the employee wasn't on leave for, and it means a
+     * half-day request (a single day) still gets attendance coverage as long
+     * as that day is a working day. markOnLeave() is idempotent, so calling
+     * this more than once for the same request/day is always safe.
+     */
+    private function linkApprovedLeaveToAttendance(LeaveRequest $leaveRequest): void
+    {
+        $cursor = CarbonImmutable::parse($leaveRequest->start_date);
+        $end = CarbonImmutable::parse($leaveRequest->end_date);
+
+        while ($cursor->lessThanOrEqualTo($end)) {
+            if ($this->schedule->isWorkingDay($cursor->toDateString())) {
+                $this->attendance->markOnLeave($leaveRequest->user_id, $cursor->toDateString());
+            }
+
+            $cursor = $cursor->addDay();
         }
     }
 

@@ -4,10 +4,15 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 final class WorkScheduleService
 {
+    public function __construct(
+        private readonly HolidayService $holidays,
+    ) {}
+
     public function get(): ?object
     {
         $schedule = DB::table('work_schedule')->first();
@@ -45,5 +50,28 @@ final class WorkScheduleService
         } else {
             DB::table('work_schedule')->where('id', $existing->id)->update($data);
         }
+    }
+
+    /**
+     * A day is a working day if it's not a configured holiday, and (when a
+     * schedule exists) its weekday is one of the configured working days.
+     * With no schedule configured yet, every non-holiday day counts as a
+     * working day, so leave/attendance logic isn't blocked on setup order.
+     */
+    public function isWorkingDay(string $date): bool
+    {
+        if ($this->holidays->isHoliday($date)) {
+            return false;
+        }
+
+        $schedule = $this->get();
+
+        if ($schedule === null) {
+            return true;
+        }
+
+        $dayOfWeek = CarbonImmutable::parse($date)->dayOfWeek;
+
+        return in_array($dayOfWeek, $schedule->working_days, true);
     }
 }

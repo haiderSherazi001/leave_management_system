@@ -59,6 +59,10 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => null,
+            // Fixed UTC+5 offset (not a named zone) so this doesn't depend on
+            // MySQL's timezone tables being populated — PKT has no DST, so a
+            // fixed offset is exactly equivalent and more portable.
+            'timezone' => env('DB_TIMEZONE', '+05:00'),
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],

@@ -7,14 +7,23 @@ namespace Tests\Feature;
 use App\Livewire\Attendance\CheckIn;
 use App\Models\Attendance;
 use App\Models\User;
+use App\Models\WorkSchedule;
 use App\Services\AttendanceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Livewire\Livewire;
 use Tests\TestCase;
 
 class AttendanceCheckInTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
+    }
 
     public function test_attendance_page_is_accessible_to_any_authenticated_role(): void
     {
@@ -111,5 +120,60 @@ class AttendanceCheckInTest extends TestCase
 
         $this->assertNotNull($service->findForDate($employeeA->id, now()->toDateString()));
         $this->assertNull($service->findForDate($employeeB->id, now()->toDateString()));
+    }
+
+    public function test_application_operates_in_pakistan_time(): void
+    {
+        $this->assertSame('Asia/Karachi', config('app.timezone'));
+        $this->assertSame('Asia/Karachi', now()->timezone->getName());
+    }
+
+    public function test_check_in_before_start_time_is_present(): void
+    {
+        WorkSchedule::factory()->create(['start_time' => '09:00:00', 'grace_minutes' => 10]);
+        $employee = User::factory()->create();
+
+        Carbon::setTestNow(Carbon::parse('2026-08-10 08:55:00'));
+
+        $service = $this->app->make(AttendanceService::class);
+        $service->checkIn($employee->id, '2026-08-10');
+
+        $this->assertDatabaseHas('attendances', ['user_id' => $employee->id, 'status' => 'present']);
+    }
+
+    public function test_check_in_within_the_grace_period_is_present(): void
+    {
+        WorkSchedule::factory()->create(['start_time' => '09:00:00', 'grace_minutes' => 10]);
+        $employee = User::factory()->create();
+
+        Carbon::setTestNow(Carbon::parse('2026-08-10 09:09:00'));
+
+        $service = $this->app->make(AttendanceService::class);
+        $service->checkIn($employee->id, '2026-08-10');
+
+        $this->assertDatabaseHas('attendances', ['user_id' => $employee->id, 'status' => 'present']);
+    }
+
+    public function test_check_in_past_the_grace_period_is_late(): void
+    {
+        WorkSchedule::factory()->create(['start_time' => '09:00:00', 'grace_minutes' => 10]);
+        $employee = User::factory()->create();
+
+        Carbon::setTestNow(Carbon::parse('2026-08-10 09:15:00'));
+
+        $service = $this->app->make(AttendanceService::class);
+        $service->checkIn($employee->id, '2026-08-10');
+
+        $this->assertDatabaseHas('attendances', ['user_id' => $employee->id, 'status' => 'late']);
+    }
+
+    public function test_check_in_without_a_configured_schedule_defaults_to_present(): void
+    {
+        $employee = User::factory()->create();
+
+        $service = $this->app->make(AttendanceService::class);
+        $service->checkIn($employee->id, now()->toDateString());
+
+        $this->assertDatabaseHas('attendances', ['user_id' => $employee->id, 'status' => 'present']);
     }
 }
