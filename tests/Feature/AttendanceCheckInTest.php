@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Livewire\Attendance\CheckIn;
 use App\Models\Attendance;
+use App\Models\Holiday;
 use App\Models\User;
 use App\Models\WorkSchedule;
 use App\Services\AttendanceService;
@@ -34,6 +35,32 @@ class AttendanceCheckInTest extends TestCase
         foreach ([$employee, $manager, $hr] as $user) {
             $this->actingAs($user)->get(route('attendance.check-in'))->assertOk();
         }
+    }
+
+    public function test_check_in_buttons_are_hidden_and_a_holiday_notice_is_shown_on_a_holiday(): void
+    {
+        Holiday::factory()->create(['date' => now()->toDateString(), 'name' => 'Independence Day']);
+        $employee = User::factory()->create();
+
+        $this->actingAs($employee);
+
+        Livewire::test(CheckIn::class)
+            ->assertSee('Independence Day')
+            ->assertSee('no check-in is required')
+            ->assertDontSee('Check In')
+            ->assertDontSee('Check Out');
+    }
+
+    public function test_check_in_buttons_are_shown_on_a_regular_working_day(): void
+    {
+        $employee = User::factory()->create();
+
+        $this->actingAs($employee);
+
+        Livewire::test(CheckIn::class)
+            ->assertSee('Check In')
+            ->assertSee('Check Out')
+            ->assertDontSee('no check-in is required');
     }
 
     public function test_employee_can_check_in(): void

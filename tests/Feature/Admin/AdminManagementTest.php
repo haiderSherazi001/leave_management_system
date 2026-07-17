@@ -10,6 +10,7 @@ use App\Livewire\Admin\LeaveTypes;
 use App\Models\Department;
 use App\Models\LeaveType;
 use App\Models\User;
+use App\Services\EmployeeDirectoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
@@ -122,6 +123,79 @@ class AdminManagementTest extends TestCase
         $this->assertSame($originalPassword, $employee->password);
     }
 
+    public function test_a_managers_role_cannot_be_changed_while_they_head_a_department(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $manager = User::factory()->manager()->create();
+        Department::factory()->create(['manager_id' => $manager->id]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('edit', $manager->id)
+            ->set('role', 'employee')
+            ->call('save')
+            ->assertHasErrors('role');
+
+        $this->assertDatabaseHas('users', ['id' => $manager->id, 'role' => 'manager']);
+    }
+
+    public function test_a_managers_role_cannot_be_changed_while_they_have_direct_reports(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $manager = User::factory()->manager()->create();
+        User::factory()->create(['manager_id' => $manager->id]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('edit', $manager->id)
+            ->set('role', 'employee')
+            ->call('save')
+            ->assertHasErrors('role');
+
+        $this->assertDatabaseHas('users', ['id' => $manager->id, 'role' => 'manager']);
+    }
+
+    public function test_a_managers_role_can_be_changed_after_reassigning_their_department_and_reports(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $manager = User::factory()->manager()->create();
+        $replacement = User::factory()->manager()->create();
+        $department = Department::factory()->create(['manager_id' => $manager->id]);
+        $report = User::factory()->create(['manager_id' => $manager->id]);
+
+        DB::table('departments')->where('id', $department->id)->update(['manager_id' => $replacement->id]);
+        DB::table('users')->where('id', $report->id)->update(['manager_id' => $replacement->id]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('edit', $manager->id)
+            ->set('role', 'employee')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('users', ['id' => $manager->id, 'role' => 'employee']);
+    }
+
+    public function test_a_manager_can_switch_to_hr_while_still_heading_a_department(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $manager = User::factory()->manager()->create();
+        Department::factory()->create(['manager_id' => $manager->id]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('edit', $manager->id)
+            ->set('role', 'hr')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('users', ['id' => $manager->id, 'role' => 'hr']);
+    }
+
     public function test_employee_manager_field_only_accepts_manager_or_hr_users(): void
     {
         $hr = User::factory()->hr()->create();
@@ -139,6 +213,144 @@ class AdminManagementTest extends TestCase
             ->set('joinedAt', now()->toDateString())
             ->call('save')
             ->assertHasErrors('managerId');
+    }
+
+    public function test_a_manager_cannot_be_assigned_as_another_managers_manager(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $otherManager = User::factory()->manager()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('startCreate')
+            ->set('name', 'New Manager')
+            ->set('email', 'new.manager@leavedesk.test')
+            ->set('password', 'password123')
+            ->set('role', 'manager')
+            ->set('managerId', $otherManager->id)
+            ->set('joinedAt', now()->toDateString())
+            ->call('save')
+            ->assertHasErrors('managerId');
+
+        $this->assertDatabaseMissing('users', ['email' => 'new.manager@leavedesk.test']);
+    }
+
+    public function test_a_manager_can_be_assigned_hr_as_their_manager(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $secondHr = User::factory()->hr()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('startCreate')
+            ->set('name', 'New Manager')
+            ->set('email', 'new.manager@leavedesk.test')
+            ->set('password', 'password123')
+            ->set('role', 'manager')
+            ->set('managerId', $secondHr->id)
+            ->set('joinedAt', now()->toDateString())
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('users', ['email' => 'new.manager@leavedesk.test', 'manager_id' => $secondHr->id]);
+    }
+
+    public function test_an_employee_can_still_be_assigned_a_manager_as_their_manager(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $manager = User::factory()->manager()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('startCreate')
+            ->set('name', 'New Employee')
+            ->set('email', 'new.employee@leavedesk.test')
+            ->set('password', 'password123')
+            ->set('role', 'employee')
+            ->set('managerId', $manager->id)
+            ->set('joinedAt', now()->toDateString())
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('users', ['email' => 'new.employee@leavedesk.test', 'manager_id' => $manager->id]);
+    }
+
+    public function test_creating_an_hr_user_with_a_manager_selected_is_forced_to_null(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $someManager = User::factory()->manager()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('startCreate')
+            ->set('name', 'New HR')
+            ->set('email', 'new.hr@leavedesk.test')
+            ->set('password', 'password123')
+            ->set('role', 'employee')
+            ->set('managerId', $someManager->id)
+            ->set('joinedAt', now()->toDateString())
+            // Switching role to hr after a manager was already picked (e.g.
+            // the admin changed their mind mid-form) must clear it, not
+            // just block the save.
+            ->set('role', 'hr')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('users', ['email' => 'new.hr@leavedesk.test', 'manager_id' => null]);
+    }
+
+    public function test_an_existing_hr_records_stale_manager_id_is_cleared_on_edit(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $someManager = User::factory()->manager()->create();
+        $staleHr = User::factory()->hr()->create();
+        DB::table('users')->where('id', $staleHr->id)->update(['manager_id' => $someManager->id]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('edit', $staleHr->id)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('users', ['id' => $staleHr->id, 'manager_id' => null]);
+    }
+
+    public function test_manager_options_are_empty_for_an_hr_subject(): void
+    {
+        User::factory()->manager()->create(['name' => 'Some Manager']);
+        User::factory()->hr()->create(['name' => 'Some HR']);
+
+        $service = $this->app->make(EmployeeDirectoryService::class);
+        $names = collect($service->managerOptions(null, 'hr'))->pluck('name')->all();
+
+        $this->assertSame([], $names);
+    }
+
+    public function test_manager_options_exclude_other_managers_for_a_manager_subject(): void
+    {
+        User::factory()->manager()->create(['name' => 'Other Manager']);
+        User::factory()->hr()->create(['name' => 'Some HR']);
+
+        $service = $this->app->make(EmployeeDirectoryService::class);
+        $names = collect($service->managerOptions(null, 'manager'))->pluck('name')->all();
+
+        $this->assertNotContains('Other Manager', $names);
+        $this->assertContains('Some HR', $names);
+    }
+
+    public function test_manager_options_include_other_managers_for_an_employee_subject(): void
+    {
+        User::factory()->manager()->create(['name' => 'Other Manager']);
+
+        $service = $this->app->make(EmployeeDirectoryService::class);
+        $names = collect($service->managerOptions(null, 'employee'))->pluck('name')->all();
+
+        $this->assertContains('Other Manager', $names);
     }
 
     public function test_a_second_manager_cannot_be_placed_into_a_department_that_already_has_one(): void
@@ -247,6 +459,64 @@ class AdminManagementTest extends TestCase
             'name' => 'Engineering',
             'manager_id' => $manager->id,
         ]);
+
+        $this->assertDatabaseHas('users', [
+            'id' => $manager->id,
+            'department_id' => Department::where('name', 'Engineering')->value('id'),
+        ]);
+    }
+
+    public function test_assigning_a_manager_to_an_existing_department_syncs_their_department_id(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $manager = User::factory()->manager()->create(['department_id' => null]);
+        $department = Department::factory()->create(['manager_id' => null]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Departments::class)
+            ->call('edit', $department->id)
+            ->set('managerId', $manager->id)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('users', ['id' => $manager->id, 'department_id' => $department->id]);
+    }
+
+    public function test_reassigning_a_departments_manager_clears_the_previous_managers_department_id(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $oldManager = User::factory()->manager()->create();
+        $newManager = User::factory()->manager()->create(['department_id' => null]);
+        $department = Department::factory()->create(['manager_id' => $oldManager->id]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Departments::class)
+            ->call('edit', $department->id)
+            ->set('managerId', $newManager->id)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('users', ['id' => $newManager->id, 'department_id' => $department->id]);
+        $this->assertDatabaseHas('users', ['id' => $oldManager->id, 'department_id' => null]);
+    }
+
+    public function test_removing_a_departments_manager_clears_their_department_id(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $manager = User::factory()->manager()->create();
+        $department = Department::factory()->create(['manager_id' => $manager->id]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Departments::class)
+            ->call('edit', $department->id)
+            ->set('managerId', null)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('users', ['id' => $manager->id, 'department_id' => null]);
     }
 
     public function test_a_manager_cannot_be_assigned_to_head_two_departments(): void

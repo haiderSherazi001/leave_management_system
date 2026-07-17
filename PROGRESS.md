@@ -309,6 +309,87 @@ Also corrected the existing bad data this surfaced: cleared `department_id` (set
 - 5 new tests in `AdminManagementTest`: a second manager is rejected from an already-headed department, a manager can be placed into an unheaded department, a manager keeps their own department on edit, a regular employee is unaffected. Full suite: 107/107 passing.
 - Real MySQL: confirmed via tinker that only `Morgan (#1)` — the department's actual `manager_id` — remains tied to `department_id = 1` after cleanup. Real HTTP: `/admin/employees` still renders correctly post-fix.
 
+## 2026-07-16 — Data-sync bug: department manager reassignment didn't update the manager's own department_id (branch: `phase-2`)
+
+### Bug found and fixed
+
+Assigning a manager to a department via `departments.manager_id` never touched that manager's own `users.department_id` — the Employees admin screen kept showing an empty department for them. Fixed with a `DepartmentObserver` (`app/Observers/DepartmentObserver.php`, registered on the `Department` model via the `#[ObservedBy(...)]` attribute) that, on save, keeps the two in sync in both directions:
+- New manager assigned (on create or update): their `department_id` is set to that department.
+- Manager reassigned or removed: the **outgoing** manager's `department_id` is cleared back to `null`, rather than left pointing at a department they no longer head — otherwise this would just relocate the earlier "employee shows a department they don't belong to" bug rather than close it.
+
+This only fires on Eloquent writes, not `DB::table()`, so `DepartmentService::create()`/`update()` were switched from raw query-builder inserts/updates to the `Department` Eloquent model (`Department::create()` / `Department::findOrFail($id)->update()`) — the one deliberate, scoped exception to this project's usual query-builder convention, since CLAUDE.md's actual current guidance is "use Eloquent where it's cleaner," and a model observer is the standard, idiomatic way to keep this kind of cross-model invariant in sync regardless of caller. `list()`/`options()`/`setActive()` were left as query-builder reads/simple toggles — no reason to touch what wasn't broken.
+
+### Verification
+
+- 4 new tests in `AdminManagementTest`: assigning a manager to an unheaded department syncs their `department_id`; reassigning a department's manager clears the outgoing manager's `department_id`; removing a department's manager (`managerId` set to `null`) clears it too; `test_hr_can_create_a_department` extended to assert the sync on creation as well. Full suite: 108/108 passing.
+- Real MySQL: reassigned Engineering's manager from `Morgan (#1)` to `manager 1 (#14)` via `DepartmentService::update()` against the live dev database — confirmed `#14`'s `department_id` became `1` and `#1`'s was cleared to `null`, then reverted and confirmed the inverse.
+
+## 2026-07-16 — Two more role-assignment integrity bugs (branch: `phase-2`)
+
+### Bugs found and fixed
+
+**A manager could be assigned as another manager's `manager_id`.** Reported directly. This app has no multi-level approval concept (Phase 4), and a Manager's own `manager_id` has no functional effect anyway — their own leave always auto-approves via the leadership bypass — so letting one manager "manage" another just produced a meaningless org-chart entry. Fixed with a closure validation rule on `Employees::rules()`'s `managerId`: when the subject's `role` is `Manager`, the selected manager must not themselves have `role = Manager` (HR is still fine, or none at all). Also filtered the dropdown itself — `EmployeeDirectoryService::managerOptions()` now takes the subject's role and excludes other managers from the option list entirely when editing a manager, not just rejecting the choice after the fact.
+
+**Changing a manager's role away from Manager/HR left dangling references**, found by extending the same audit: nothing stopped HR from demoting a Manager to `employee` while that person still headed a department (`departments.manager_id`) or had active direct reports (`users.manager_id` pointing at them) — both would keep pointing at someone no longer eligible to be either. Reproduced first via raw DB update to confirm it was real before fixing. Fixed with a closure rule on `Employees::rules()`'s `role`: a role change away from `['manager', 'hr']` is rejected if the person currently heads an active department or has active direct reports, with a message telling HR to reassign those first — same "block, don't silently mutate" pattern as the two-managers-per-department fix. Switching Manager ↔ HR remains unrestricted either way, since both roles are equally valid department/manager assignees.
+
+### Verification
+
+- 9 new tests in `AdminManagementTest`: manager-to-manager rejected, HR-as-manager's-manager allowed, employee-with-a-manager still allowed, dropdown options exclude/include correctly for manager vs. employee subjects, role change blocked while heading a department, blocked while having direct reports, allowed after reassigning both, Manager→HR allowed while still heading a department. Full suite: 117/117 passing.
+- Real MySQL: reproduced the dangling-reference bug first (raw update demoting a manager who headed a department and had a direct report — confirmed both references were left dangling) before writing the fix, then confirmed the same underlying `exists()` checks against the live dev data (`Morgan #1` still heads Engineering → correctly blocked; `manager 1 #14` has no active reports → correctly unblocked).
+
+## 2026-07-16 — Strict top-down manager hierarchy (branch: `phase-2`)
+
+### Work done
+
+Explicit request to lock down three hierarchy rules for `Employees::rules()`'s `managerId` (rules 2 and 3 were effectively already in place from the earlier manager-to-manager fix; rule 1 was new):
+1. **HR can never have a manager.** `managerId` is force-cleared to `null` in three places, not just validated: `Employees::updatedRole()` (a Livewire lifecycle hook — clears it the instant "HR" is picked in the role dropdown, live, via `wire:model.live="role"`), `Employees::edit()` (self-heals any pre-existing HR record with a stale `manager_id` the moment it's opened for editing), and defensively again in `save()` right before validation. The validation closure on `managerId` still rejects a non-null value for an HR subject as a backstop, even though the forcing above means it should never actually see one through this form.
+2. **A manager can only be managed by HR, never another manager** — already enforced from the prior session's fix; unchanged.
+3. **An employee can be managed by either a Manager or HR** — the unrestricted default case; unchanged.
+- `EmployeeDirectoryService::managerOptions()` returns an empty option list entirely when the subject's role is HR, and the Blade view disables the manager `<select>` (with a short explanatory note) whenever `role === 'hr'`, so the field isn't just rejected on save but genuinely not interactable.
+
+**Real bug this surfaced immediately**: the dev database's own `Harper HR` account already had a stale `manager_id` pointing at another user — direct, live proof the missing rule was a real gap, not a hypothetical one. Confirmed the self-healing `edit()` path fixes it the moment the record is opened, without needing a separate migration or data-fix script.
+
+### Verification
+
+- 4 new tests in `AdminManagementTest`: creating an HR user after a manager was already selected forces it to `null` on save; opening an existing HR record with a stale `manager_id` clears it on save; `managerOptions()` returns `[]` for an HR subject. Full suite: 120/120 passing.
+- Real MySQL: instantiated the actual `Employees` Livewire component directly against the live dev database (not the SQLite test DB) — confirmed `edit()` on the real `Harper HR` record (which had a genuinely stale `manager_id`) nulled it immediately, `save()` persisted the `null`, and `updatedRole('hr')` clears an in-progress `managerId` selection reactively. Real HTTP: `/admin/employees` still renders correctly post-fix.
+
+### Plan for next session
+
+Same as before — **Phase 3, Reporting**, is next. No outstanding work from today's bug fixes.
+
+## 2026-07-17 — Holiday/calendar UX pass (branch: `phase-2`)
+
+### Work done
+
+Four explicit UI requests, all done:
+
+1. **Attendance page holiday state**: `HolidayService::forDate(string $date): ?object` added; `CheckIn::render()` passes `todayHoliday` to the view. When today is a holiday, the Check In/Check Out buttons are replaced entirely with an amber Tailwind alert box naming the holiday ("Today is {name} — no check-in is required today."), rather than just disabling the buttons.
+2. **Calendar colors**: `CalendarService` now hardcodes real `backgroundColor`/`borderColor`/`textColor` on every event (indigo `#6366f1` for leave, gray `#4b5563` for holidays) instead of relying solely on `classNames` — holidays render distinctly even before any page CSS loads. Holiday titles are now prefixed `"Holiday: {name}"` so they never read like a leave-request entry at a glance.
+3. **Text overflow + overflow popover**: added a small scoped CSS block to `resources/css/app.css` (`#team-calendar .fc-daygrid-event, #team-calendar .fc-event-title { white-space: normal; }`) so long titles wrap instead of truncating — kept scoped since FullCalendar injects its own CSS at runtime and there's nothing to override globally. Added `dayMaxEvents: true` to the FullCalendar config in `team-calendar.js`, which turns on FullCalendar's built-in "+N more" popover for days with too many events to show inline.
+4. **Upcoming Holidays list**: `HolidayService::upcoming(int $limit = 5)` (next N holidays from today, ordered by date) wired into `TeamCalendar::render()`. The page layout changed from a single full-width card to a responsive `lg:grid-cols-3` — calendar takes 2 columns, a new "Upcoming Holidays" card sits alongside it (stacks below on mobile).
+
+**Found along the way, unrelated to the four requests**: `private const string LEAVE_COLOR = ...` (PHP 8.3 typed class constant syntax) failed to parse — the actual installed PHP CLI is 8.2.12, not the 8.3 CLAUDE.md describes. Switched to plain untyped constants. Worth knowing if any future work reaches for PHP 8.3-only syntax.
+
+### Verification
+
+- 6 new tests: 2 in `AttendanceCheckInTest` (holiday hides buttons + shows notice; non-holiday still shows buttons), 3 in `TeamCalendarTest` (leave events carry the hardcoded color, holiday events carry their color + prefixed title, upcoming holidays list shows future-only holidays). Full suite: 123/123 passing.
+- `npm run build` succeeds, CSS bundle includes the new scoped rule.
+- Real MySQL + HTTP: the dev database already had a holiday for today (`h1`, from earlier manual testing) — used it directly rather than seeding synthetic data. Logged in as a real employee, confirmed `/attendance` shows the holiday name and notice text with both buttons absent from the HTML. Logged in as the real manager, confirmed `/leave/team-calendar` renders the "Upcoming Holidays" heading and that both hardcoded hex colors (`#4b5563` holiday, `#6366f1` leave) and the `"Holiday: "` title prefix appear in the page's embedded initial-events JSON.
+
+## 2026-07-17 — Upcoming Holidays card for employees (branch: `phase-2`)
+
+### Work done
+
+Reused `HolidayService::upcoming()` (built for the manager's Team Calendar sidebar) on the employee-facing `/leave/apply` page: `RequestForm::render()` now injects `HolidayService` and passes `upcomingHolidays` (default limit 5) to the view. A card matching the same visual style as the manager sidebar list — name + date, no icons or complexity — sits above the "Apply for Leave" form itself (so it's seen before picking dates, not after), with a one-line note explaining why it matters ("The office is closed on these days — no need to apply for leave"). The card is omitted entirely when there are no upcoming holidays, rather than rendering an empty shell.
+
+No new service logic was needed — this was purely reusing existing `HolidayService`/data-shape work and adding a second, employee-facing consumer of it.
+
+### Verification
+
+- 2 new tests in `LeaveRequestWorkflowTest`: the card shows a future holiday and excludes a past one; the card is absent entirely when there are no holidays. Full suite: 125/125 passing.
+- Real MySQL + HTTP: logged in as a real employee, confirmed `/leave/apply` shows the "Upcoming Holidays" heading, the real dev-DB holiday (`h1`), and the explanatory note.
+
 ### Plan for next session
 
 Same as before — **Phase 3, Reporting**, is next. No outstanding work from today's bug fixes.

@@ -1,3 +1,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * FullCalendar ships its own CSS at runtime (no stylesheet to import), so
+ * these overrides are scoped to #team-calendar and kept minimal. Default
+ * event titles are single-line/truncated; long employee + leave-type names
+ * were getting cut off, so this lets them wrap instead.
+ */
+#team-calendar .fc-daygrid-event,
+#team-calendar .fc-event-title {
+    white-space: normal;
+}

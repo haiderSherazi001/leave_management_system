@@ -48,6 +48,11 @@ final class HolidayService
         return DB::table('holidays')->where('date', $date)->exists();
     }
 
+    public function forDate(string $date): ?object
+    {
+        return DB::table('holidays')->where('date', $date)->first();
+    }
+
     /**
      * @return array<int, object>
      */
@@ -56,6 +61,21 @@ final class HolidayService
         return DB::table('holidays')
             ->whereBetween('date', [$start, $end])
             ->orderBy('date')
+            ->get()
+            ->all();
+    }
+
+    /**
+     * The next N holidays from today onward, for an "Upcoming Holidays" list.
+     *
+     * @return array<int, object>
+     */
+    public function upcoming(int $limit = 5): array
+    {
+        return DB::table('holidays')
+            ->where('date', '>=', now()->toDateString())
+            ->orderBy('date')
+            ->limit($limit)
             ->get()
             ->all();
     }

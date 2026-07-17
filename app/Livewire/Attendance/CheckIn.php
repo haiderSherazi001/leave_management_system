@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Livewire\Attendance;
 
 use App\Services\AttendanceService;
+use App\Services\HolidayService;
 use DomainException;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
@@ -38,13 +39,14 @@ class CheckIn extends Component
         }
     }
 
-    public function render(AttendanceService $service): View
+    public function render(AttendanceService $service, HolidayService $holidays): View
     {
         $userId = (int) Auth::id();
 
         return view('livewire.attendance.check-in', [
             'today' => $service->findForDate($userId, now()->toDateString()),
             'history' => $service->historyForUser($userId, 14),
+            'todayHoliday' => $holidays->forDate(now()->toDateString()),
         ]);
     }
 }

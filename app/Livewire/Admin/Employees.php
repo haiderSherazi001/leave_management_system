@@ -52,7 +52,32 @@ class Employees extends Component
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($this->editingId)],
             'password' => [$this->editingId === null ? 'required' : 'nullable', 'min:8'],
-            'role' => ['required', Rule::enum(UserRole::class)],
+            'role' => [
+                'required',
+                Rule::enum(UserRole::class),
+                // Changing a manager/HR's role away from manager-or-hr while
+                // they still head a department or have direct reports would
+                // leave departments.manager_id / other users' manager_id
+                // dangling — pointing at someone no longer eligible to be
+                // either. Force reassigning those first, same as the app
+                // already requires for the reverse direction (assigning a
+                // manager into an already-headed department).
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($this->editingId === null || in_array($value, ['manager', 'hr'], true)) {
+                        return;
+                    }
+
+                    if (DB::table('departments')->where('manager_id', $this->editingId)->exists()) {
+                        $fail('This person heads a department — reassign it before changing their role.');
+
+                        return;
+                    }
+
+                    if (DB::table('users')->where('manager_id', $this->editingId)->where('is_active', true)->exists()) {
+                        $fail('This person has employees reporting to them — reassign those first.');
+                    }
+                },
+            ],
             'departmentId' => [
                 'nullable',
                 'integer',
@@ -79,6 +104,28 @@ class Employees extends Component
                 'integer',
                 Rule::exists('users', 'id')->where(fn ($query) => $query->whereIn('role', ['manager', 'hr'])->where('is_active', true)),
                 Rule::notIn([$this->editingId]),
+                // Strict top-down hierarchy: HR is never managed by anyone
+                // (save() already forces this to null before we get here —
+                // this is the backstop); a manager may only be managed by HR,
+                // never another manager, since manager-to-manager reporting
+                // isn't a concept this app models (there's no multi-level
+                // approval yet); an employee may be managed by either.
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value === null) {
+                        return;
+                    }
+
+                    if ($this->role === UserRole::Hr->value) {
+                        $fail('HR accounts do not have a manager.');
+
+                        return;
+                    }
+
+                    if ($this->role === UserRole::Manager->value
+                        && DB::table('users')->where('id', $value)->value('role') === UserRole::Manager->value) {
+                        $fail('A manager cannot be assigned as another manager\'s manager.');
+                    }
+                },
             ],
             'joinedAt' => ['required', 'date'],
         ];
@@ -105,9 +152,23 @@ class Employees extends Component
         $this->password = '';
         $this->role = $user->role;
         $this->departmentId = $user->department_id;
-        $this->managerId = $user->manager_id;
+        // Self-healing: an HR record should never carry a manager_id, even if
+        // one was set before this rule existed.
+        $this->managerId = $user->role === UserRole::Hr->value ? null : $user->manager_id;
         $this->joinedAt = $user->joined_at;
         $this->showForm = true;
+    }
+
+    /**
+     * HR accounts never have a manager — clear it the moment HR is picked,
+     * so the (now disabled) manager dropdown reflects that immediately
+     * rather than waiting for save() to force it.
+     */
+    public function updatedRole(string $value): void
+    {
+        if ($value === UserRole::Hr->value) {
+            $this->managerId = null;
+        }
     }
 
     public function cancel(): void
@@ -118,6 +179,10 @@ class Employees extends Component
 
     public function save(EmployeeDirectoryService $service): void
     {
+        if ($this->role === UserRole::Hr->value) {
+            $this->managerId = null;
+        }
+
         $validated = $this->validate();
 
         if ($this->editingId === null) {
@@ -167,7 +232,7 @@ class Employees extends Component
         return view('livewire.admin.employees', [
             'employees' => $service->list(),
             'departments' => $departments->options($this->departmentId),
-            'managers' => $service->managerOptions($this->managerId),
+            'managers' => $service->managerOptions($this->managerId, $this->role),
             'roles' => UserRole::cases(),
         ]);
     }

@@ -17,6 +17,7 @@ document.addEventListener('livewire:init', () => {
         plugins: [dayGridPlugin],
         initialView: 'dayGridMonth',
         events: window.teamCalendarInitialEvents ?? [],
+        dayMaxEvents: true,
         datesSet(info) {
             if (!wireId) {
                 return;

@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Livewire\Leave\ApprovalQueue;
 use App\Livewire\Leave\RequestForm;
+use App\Models\Holiday;
 use App\Models\LeaveBalance;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
@@ -33,6 +34,29 @@ class LeaveRequestWorkflowTest extends TestCase
         $this->actingAs($employee)->get(route('leave.apply'))->assertOk();
         $this->actingAs($employee)->get(route('leave.my-requests'))->assertOk();
         $this->actingAs($manager)->get(route('leave.approvals'))->assertOk();
+    }
+
+    public function test_upcoming_holidays_are_shown_on_the_apply_for_leave_page(): void
+    {
+        $employee = User::factory()->create();
+        Holiday::factory()->create(['date' => now()->addDays(4)->toDateString(), 'name' => 'Founders Day']);
+        Holiday::factory()->create(['date' => now()->subMonths(2)->toDateString(), 'name' => 'Past Holiday']);
+
+        $this->actingAs($employee);
+
+        Livewire::test(RequestForm::class)
+            ->assertSee('Upcoming Holidays')
+            ->assertSee('Founders Day')
+            ->assertDontSee('Past Holiday');
+    }
+
+    public function test_upcoming_holidays_card_is_hidden_when_there_are_none(): void
+    {
+        $employee = User::factory()->create();
+
+        $this->actingAs($employee);
+
+        Livewire::test(RequestForm::class)->assertDontSee('Upcoming Holidays');
     }
 
     public function test_employee_can_submit_a_leave_request_within_balance(): void

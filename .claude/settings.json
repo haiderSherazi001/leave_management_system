@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -NoProfile -Command \"taskkill /F /IM php.exe\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" --max-time 2 http://127.0.0.1:8126/login)",
+      "Bash(vendor/bin/pint --dirty)",
+      "Bash(php artisan *)",
+      "Bash(php -v)"
+    ]
+  }
+}

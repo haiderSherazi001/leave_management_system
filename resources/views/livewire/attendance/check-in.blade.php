@@ -26,14 +26,26 @@
                 </div>
             </div>
 
-            <div class="mt-6 flex gap-2">
-                <x-primary-button wire:click="checkIn" :disabled="(bool) $today?->check_in_at">
-                    Check In
-                </x-primary-button>
-                <x-secondary-button wire:click="checkOut" :disabled="! $today?->check_in_at || (bool) $today?->check_out_at">
-                    Check Out
-                </x-secondary-button>
-            </div>
+            @if ($todayHoliday)
+                <div class="mt-6 flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-4">
+                    <svg class="mt-0.5 h-5 w-5 shrink-0 text-amber-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l6.516 11.598c.75 1.334-.213 2.984-1.742 2.984H3.483c-1.53 0-2.493-1.65-1.743-2.984L8.257 3.1zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                    <div>
+                        <p class="text-sm font-medium text-amber-800">Today is {{ $todayHoliday->name }}</p>
+                        <p class="text-sm text-amber-700">It's a company holiday — no check-in is required today.</p>
+                    </div>
+                </div>
+            @else
+                <div class="mt-6 flex gap-2">
+                    <x-primary-button wire:click="checkIn" :disabled="(bool) $today?->check_in_at">
+                        Check In
+                    </x-primary-button>
+                    <x-secondary-button wire:click="checkOut" :disabled="! $today?->check_in_at || (bool) $today?->check_out_at">
+                        Check Out
+                    </x-secondary-button>
+                </div>
+            @endif
         </div>
 
         <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">

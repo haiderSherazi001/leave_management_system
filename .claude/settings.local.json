@@ -3,7 +3,25 @@
     "allow": [
       "Bash(composer require *)",
       "Bash(php artisan *)",
-      "Bash(pkill -f \"artisan serve\")"
+      "Bash(pkill -f \"artisan serve\")",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(vendor/bin/pint --dirty)",
+      "Bash(php artisan tinker '--execute= *)",
+      "Bash(powershell -NoProfile -Command 'Get-Process -Name php -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq '\\\\'''\\\\'' } | Stop-Process -Force')",
+      "Bash(taskkill //F //IM php.exe)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" --max-time 2 http://127.0.0.1:8123/login)",
+      "Bash(cp \"/c/Users/ITLAB~1/AppData/Local/Temp/claude/d--LaravelProjects-leavedesk/1ad77f1f-a122-4fdc-93d8-ec865f7043f9/scratchpad/BugReproTest.php\" /d/LaravelProjects/leavedesk/tests/Feature/BugReproTest.php *)",
+      "Bash(powershell -NoProfile -Command \"taskkill /F /IM php.exe\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" --max-time 2 http://127.0.0.1:8124/login)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" --max-time 2 http://127.0.0.1:8125/login)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" --max-time 2 http://127.0.0.1:8127/login)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" --max-time 2 http://127.0.0.1:8128/login)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\ITLAB~1\\AppData\\Local\\Temp\\claude\\d--LaravelProjects-leavedesk\\1ad77f1f-a122-4fdc-93d8-ec865f7043f9\\scratchpad"
     ]
   }
 }

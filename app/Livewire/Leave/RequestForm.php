@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Livewire\Leave;
 
+use App\Services\HolidayService;
 use App\Services\LeaveBalanceService;
 use App\Services\LeaveRequestService;
 use Carbon\CarbonImmutable;
@@ -76,13 +77,14 @@ class RequestForm extends Component
         $this->successMessage = 'Leave request submitted successfully.';
     }
 
-    public function render(LeaveBalanceService $balanceService): View
+    public function render(LeaveBalanceService $balanceService, HolidayService $holidays): View
     {
         $userId = (int) Auth::id();
 
         return view('livewire.leave.request-form', [
             'leaveTypes' => DB::table('leave_types')->where('is_active', true)->orderBy('name')->get(),
             'balances' => $balanceService->forUser($userId, CarbonImmutable::now()->year),
+            'upcomingHolidays' => $holidays->upcoming(5),
         ]);
     }
 }

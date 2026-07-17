@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Models\Department;
 use Illuminate\Support\Facades\DB;
 
 final class DepartmentService
@@ -51,22 +52,24 @@ final class DepartmentService
         return $departments->all();
     }
 
+    /**
+     * Uses the Eloquent model (not the query builder) so DepartmentObserver's
+     * manager <-> department_id sync fires — that observer only listens for
+     * Eloquent model events, which a raw DB::table() write would bypass.
+     */
     public function create(string $name, ?int $managerId): int
     {
-        return DB::table('departments')->insertGetId([
+        return Department::create([
             'name' => $name,
             'manager_id' => $managerId,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        ])->id;
     }
 
     public function update(int $departmentId, string $name, ?int $managerId): void
     {
-        DB::table('departments')->where('id', $departmentId)->update([
+        Department::findOrFail($departmentId)->update([
             'name' => $name,
             'manager_id' => $managerId,
-            'updated_at' => now(),
         ]);
     }
 

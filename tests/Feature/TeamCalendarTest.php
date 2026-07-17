@@ -55,6 +55,9 @@ class TeamCalendarTest extends TestCase
         $leaveEvents = array_filter($events, fn (array $event) => $event['extendedProps']['type'] === 'leave');
         $this->assertCount(1, $leaveEvents);
         $this->assertStringContainsString($employeeA->name, array_values($leaveEvents)[0]['title']);
+        // Hardcoded, distinct from the holiday color, so leave and holiday
+        // events are never visually ambiguous on the calendar.
+        $this->assertSame('#6366f1', array_values($leaveEvents)[0]['backgroundColor']);
     }
 
     public function test_manager_sees_approved_leave_for_employees_in_a_department_they_head(): void
@@ -150,7 +153,9 @@ class TeamCalendarTest extends TestCase
 
         $holidayEvents = array_filter($events, fn (array $event) => $event['extendedProps']['type'] === 'holiday');
         $this->assertCount(1, $holidayEvents);
-        $this->assertSame('Company Holiday', array_values($holidayEvents)[0]['title']);
+        // Prefixed so a holiday never reads like a leave-request event at a glance.
+        $this->assertSame('Holiday: Company Holiday', array_values($holidayEvents)[0]['title']);
+        $this->assertSame('#4b5563', array_values($holidayEvents)[0]['backgroundColor']);
     }
 
     public function test_leave_event_end_date_is_exclusive_for_full_calendar(): void
@@ -181,6 +186,22 @@ class TeamCalendarTest extends TestCase
         // CalendarService needs to guard against for real, DB::table()-written rows.
         $this->assertSame($start->addDays(2)->toDateString(), CarbonImmutable::parse($leaveEvents[0]['start'])->toDateString());
         $this->assertSame($start->addDays(5)->toDateString(), CarbonImmutable::parse($leaveEvents[0]['end'])->toDateString());
+    }
+
+    public function test_upcoming_holidays_are_displayed_on_the_team_calendar_page(): void
+    {
+        $manager = User::factory()->manager()->create();
+        Holiday::factory()->create(['date' => now()->addDays(3)->toDateString(), 'name' => 'Founders Day']);
+        // Two months back so it also falls outside the current month's own
+        // calendar event data, not just the "upcoming" list.
+        Holiday::factory()->create(['date' => now()->subMonths(2)->toDateString(), 'name' => 'Past Holiday']);
+
+        $this->actingAs($manager);
+
+        Livewire::test(TeamCalendar::class)
+            ->assertSee('Upcoming Holidays')
+            ->assertSee('Founders Day')
+            ->assertDontSee('Past Holiday');
     }
 
     public function test_load_events_for_range_dispatches_team_scoped_events(): void

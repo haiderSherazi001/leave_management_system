@@ -2,6 +2,24 @@
     <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
     <h2 class="font-semibold text-xl text-gray-800 leading-tight">{{ __('Apply for Leave') }}</h2>
 
+    @if (count($upcomingHolidays) > 0)
+        <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
+            <h3 class="text-sm font-semibold text-gray-900 mb-4">Upcoming Holidays</h3>
+            <p class="text-xs text-gray-500 mb-3">The office is closed on these days — no need to apply for leave.</p>
+
+            <ul class="divide-y divide-gray-100">
+                @foreach ($upcomingHolidays as $holiday)
+                    <li class="py-2.5 flex items-center justify-between gap-3" wire:key="upcoming-holiday-{{ $holiday->id }}">
+                        <span class="text-sm text-gray-700">{{ $holiday->name }}</span>
+                        <span class="shrink-0 text-xs font-medium text-gray-500">
+                            {{ \Illuminate\Support\Carbon::parse($holiday->date)->format('M j, Y') }}
+                        </span>
+                    </li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
     <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
         <h3 class="text-lg font-medium text-gray-900 mb-4">Apply for Leave</h3>
 

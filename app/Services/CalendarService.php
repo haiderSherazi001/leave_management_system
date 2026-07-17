@@ -8,6 +8,17 @@ use Carbon\CarbonImmutable;
 
 final class CalendarService
 {
+    /**
+     * Hardcoded so leave and holiday events are never visually ambiguous —
+     * holidays are gray (deliberately not a "leave type color") and leave
+     * requests are indigo, applied as real background/border colors (not
+     * just CSS classNames) so FullCalendar renders them distinctly even
+     * before any page-specific CSS loads.
+     */
+    private const LEAVE_COLOR = '#6366f1';
+
+    private const HOLIDAY_COLOR = '#4b5563';
+
     public function __construct(
         private readonly LeaveRequestService $leaveRequests,
         private readonly HolidayService $holidays,
@@ -31,6 +42,9 @@ final class CalendarService
                 'end' => $this->exclusiveEnd($request->end_date),
                 'allDay' => true,
                 'classNames' => ['fc-event-leave'],
+                'backgroundColor' => self::LEAVE_COLOR,
+                'borderColor' => self::LEAVE_COLOR,
+                'textColor' => '#ffffff',
                 'extendedProps' => [
                     'type' => 'leave',
                     'reason' => $request->reason,
@@ -42,11 +56,16 @@ final class CalendarService
         foreach ($this->holidays->betweenDates($start, $end) as $holiday) {
             $events[] = [
                 'id' => 'holiday-'.$holiday->id,
-                'title' => $holiday->name,
+                // Prefixed so it never reads like a leave-request event at a
+                // glance, on the calendar grid or in the overflow popover.
+                'title' => 'Holiday: '.$holiday->name,
                 'start' => $holiday->date,
                 'end' => $this->exclusiveEnd($holiday->date),
                 'allDay' => true,
                 'classNames' => ['fc-event-holiday'],
+                'backgroundColor' => self::HOLIDAY_COLOR,
+                'borderColor' => self::HOLIDAY_COLOR,
+                'textColor' => '#ffffff',
                 'extendedProps' => [
                     'type' => 'holiday',
                 ],

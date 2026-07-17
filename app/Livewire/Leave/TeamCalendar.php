@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Livewire\Leave;
 
 use App\Services\CalendarService;
+use App\Services\HolidayService;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
@@ -32,13 +33,14 @@ class TeamCalendar extends Component
         $this->dispatch('calendar-events-updated', events: $events);
     }
 
-    public function render(CalendarService $service): View
+    public function render(CalendarService $service, HolidayService $holidays): View
     {
         $start = CarbonImmutable::now()->startOfMonth()->toDateString();
         $end = CarbonImmutable::now()->endOfMonth()->toDateString();
 
         return view('livewire.leave.team-calendar', [
             'initialEvents' => $service->teamEventsBetween((int) Auth::id(), $start, $end),
+            'upcomingHolidays' => $holidays->upcoming(5),
         ]);
     }
 }

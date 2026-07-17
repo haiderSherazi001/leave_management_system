@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\UserRole;
 use App\Models\User;
 use DomainException;
 use Illuminate\Support\Facades\DB;
@@ -43,14 +44,23 @@ final class EmployeeDirectoryService
     /**
      * Active managers/HR for dropdown selection, plus the currently assigned
      * one even if it has since been deactivated (so editing a record never
-     * silently drops a valid existing assignment).
+     * silently drops a valid existing assignment). Enforces the strict
+     * top-down hierarchy: HR is never assigned a manager (empty options),
+     * a Manager may only be offered HR (never another Manager), and an
+     * Employee may be offered either.
      *
      * @return array<int, object>
      */
-    public function managerOptions(?int $currentManagerId): array
+    public function managerOptions(?int $currentManagerId, ?string $subjectRole = null): array
     {
+        if ($subjectRole === UserRole::Hr->value) {
+            return [];
+        }
+
+        $allowedRoles = $subjectRole === UserRole::Manager->value ? ['hr'] : ['manager', 'hr'];
+
         $managers = DB::table('users')
-            ->whereIn('role', ['manager', 'hr'])
+            ->whereIn('role', $allowedRoles)
             ->where('is_active', true)
             ->orderBy('name')
             ->get();

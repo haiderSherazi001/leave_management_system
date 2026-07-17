@@ -36,7 +36,7 @@
                     <div class="grid grid-cols-3 gap-4">
                         <div>
                             <x-input-label for="role" value="Role" />
-                            <select id="role" wire:model="role" class="mt-1 block w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
+                            <select id="role" wire:model.live="role" class="mt-1 block w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
                                 @foreach ($roles as $roleOption)
                                     <option value="{{ $roleOption->value }}">{{ $roleOption->label() }}</option>
                                 @endforeach
@@ -59,7 +59,12 @@
 
                         <div>
                             <x-input-label for="managerId" value="Manager" />
-                            <select id="managerId" wire:model="managerId" class="mt-1 block w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
+                            <select
+                                id="managerId"
+                                wire:model="managerId"
+                                @disabled($role === 'hr')
+                                class="mt-1 block w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm disabled:bg-gray-100 disabled:text-gray-400"
+                            >
                                 <option value="">None</option>
                                 @foreach ($managers as $manager)
                                     <option value="{{ $manager->id }}">
@@ -67,6 +72,9 @@
                                     </option>
                                 @endforeach
                             </select>
+                            @if ($role === 'hr')
+                                <p class="mt-1 text-xs text-gray-500">HR accounts do not have a manager.</p>
+                            @endif
                             <x-input-error :messages="$errors->get('managerId')" class="mt-2" />
                         </div>
                     </div>
