@@ -32,8 +32,10 @@ final class EmployeeDirectoryService
                 'employees.is_active',
                 'employees.department_id',
                 'departments.name as department_name',
+                'departments.is_active as department_is_active',
                 'employees.manager_id',
                 'managers.name as manager_name',
+                'managers.is_active as manager_is_active',
                 'employees.joined_at',
             )
             ->orderBy('employees.name')

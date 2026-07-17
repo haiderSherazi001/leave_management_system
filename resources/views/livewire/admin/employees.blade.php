@@ -119,8 +119,18 @@
                             <td class="py-2 pr-4">{{ $employee->name }}</td>
                             <td class="py-2 pr-4">{{ $employee->email }}</td>
                             <td class="py-2 pr-4">{{ ucfirst($employee->role) }}</td>
-                            <td class="py-2 pr-4">{{ $employee->department_name ?? '—' }}</td>
-                            <td class="py-2 pr-4">{{ $employee->manager_name ?? '—' }}</td>
+                            <td class="py-2 pr-4">
+                                {{ $employee->department_name ?? '—' }}
+                                @if ($employee->department_name && ! $employee->department_is_active)
+                                    <span class="ml-1 px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Deactivated</span>
+                                @endif
+                            </td>
+                            <td class="py-2 pr-4">
+                                {{ $employee->manager_name ?? '—' }}
+                                @if ($employee->manager_name && ! $employee->manager_is_active)
+                                    <span class="ml-1 px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">Deactivated</span>
+                                @endif
+                            </td>
                             <td class="py-2 pr-4">{{ \Illuminate\Support\Carbon::parse($employee->joined_at)->format('M j, Y') }}</td>
                             <td class="py-2 pr-4">
                                 <span @class([

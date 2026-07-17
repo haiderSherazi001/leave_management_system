@@ -390,6 +390,21 @@ No new service logic was needed — this was purely reusing existing `HolidaySer
 - 2 new tests in `LeaveRequestWorkflowTest`: the card shows a future holiday and excludes a past one; the card is absent entirely when there are no holidays. Full suite: 125/125 passing.
 - Real MySQL + HTTP: logged in as a real employee, confirmed `/leave/apply` shows the "Upcoming Holidays" heading, the real dev-DB holiday (`h1`), and the explanatory note.
 
+## 2026-07-17 — Deactivated manager/department not flagged in admin lists (branch: `main`)
+
+### Bug found and fixed
+
+Reported: the Departments admin list shows a department's `manager_name`, but gives no indication if that manager has since been deactivated — an admin scanning the list has no way to tell which departments need their manager reassigned. Checked for the same pattern elsewhere and found it also missing on the Employees list, for both `department_name` and `manager_name` — an employee's `department_id`/`manager_id` can point at a deactivated department/manager with no visual signal either.
+
+Fixed both: `DepartmentService::list()` now also selects `managers.is_active as manager_is_active`; `EmployeeDirectoryService::list()` now also selects `departments.is_active as department_is_active` and `managers.is_active as manager_is_active`. Both Blade views append a small red "Deactivated" badge next to the name whenever the referenced manager/department is inactive (guarded so it never shows for a `null`/unassigned manager or department, only an actual inactive one).
+
+**Deliberately left out of scope, different in kind**: `MyRequests`' `approver_name` and `ApprovalQueue`'s `employee_name` also reference users whose active status isn't shown, but those are historical/transactional records (who approved this request, who is this request from), not a *current, reassignable* org-chart assignment the way `departments.manager_id` and an employee's own `manager_id`/`department_id` are — flagging those didn't seem to serve the same "which assignment needs fixing" purpose this request was about. Worth a follow-up ask if that's wanted too.
+
+### Verification
+
+- 4 new tests in `AdminManagementTest`: Departments list flags a deactivated manager (and doesn't flag an active one); Employees list flags both a deactivated department and manager together (and doesn't flag active ones). Full suite: 129/129 passing.
+- Real MySQL + HTTP: temporarily deactivated the real `Morgan Manager` (`#1`, heads Engineering) in the dev database, confirmed both `/admin/departments` and `/admin/employees` render the "Deactivated" badge next to his name for every row referencing him, then reverted him back to active.
+
 ### Plan for next session
 
 Same as before — **Phase 3, Reporting**, is next. No outstanding work from today's bug fixes.

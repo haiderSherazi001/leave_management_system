@@ -21,6 +21,7 @@ final class DepartmentService
                 'departments.name',
                 'departments.manager_id',
                 'managers.name as manager_name',
+                'managers.is_active as manager_is_active',
                 'departments.is_active',
             )
             ->orderBy('departments.name')

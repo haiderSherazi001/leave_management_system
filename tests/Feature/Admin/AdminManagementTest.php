@@ -688,6 +688,43 @@ class AdminManagementTest extends TestCase
         $this->assertTrue($employee->fresh()->is_active);
     }
 
+    public function test_employees_list_flags_a_deactivated_department_and_manager(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $manager = User::factory()->manager()->create(['name' => 'Deactivated Manager', 'is_active' => false]);
+        $department = Department::factory()->create(['name' => 'Deactivated Department', 'is_active' => false]);
+        User::factory()->create([
+            'name' => 'Some Employee',
+            'manager_id' => $manager->id,
+            'department_id' => $department->id,
+        ]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->assertSeeInOrder(['Deactivated Manager', 'Deactivated'])
+            ->assertSeeInOrder(['Deactivated Department', 'Deactivated']);
+    }
+
+    public function test_employees_list_does_not_flag_an_active_department_and_manager(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $manager = User::factory()->manager()->create(['name' => 'Active Manager']);
+        $department = Department::factory()->create(['name' => 'Active Department']);
+        User::factory()->create([
+            'name' => 'Some Employee',
+            'manager_id' => $manager->id,
+            'department_id' => $department->id,
+        ]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->assertSee('Active Manager')
+            ->assertSee('Active Department')
+            ->assertDontSee('Deactivated');
+    }
+
     public function test_hr_cannot_deactivate_the_last_active_hr_account(): void
     {
         $hr = User::factory()->hr()->create();
@@ -756,6 +793,30 @@ class AdminManagementTest extends TestCase
 
         Livewire::test(Departments::class)->call('toggleActive', $department->id);
         $this->assertTrue($department->fresh()->is_active);
+    }
+
+    public function test_departments_list_flags_a_deactivated_manager(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $manager = User::factory()->manager()->create(['name' => 'Deactivated Manager', 'is_active' => false]);
+        Department::factory()->create(['name' => 'Engineering', 'manager_id' => $manager->id]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Departments::class)->assertSeeInOrder(['Deactivated Manager', 'Deactivated']);
+    }
+
+    public function test_departments_list_does_not_flag_an_active_manager(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $manager = User::factory()->manager()->create(['name' => 'Active Manager']);
+        Department::factory()->create(['name' => 'Engineering', 'manager_id' => $manager->id]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Departments::class)
+            ->assertSee('Active Manager')
+            ->assertDontSee('Deactivated');
     }
 
     public function test_hr_can_deactivate_and_reactivate_a_leave_type(): void
