@@ -425,3 +425,20 @@ First Phase 3 feature: an HR-only `/admin/dashboard` page with four company-wide
 ### Plan for next session
 
 Continue Phase 3: next up is likely Excel/PDF attendance exports and/or scheduled HR reports, per `CLAUDE.md`'s Phase 3 scope. Not started yet — no packages (Laravel Excel, DomPDF) installed.
+
+## 2026-07-17 — Nav cleanup: duplicate "Dashboard" entry for HR (branch: `main`)
+
+### Bug found and fixed
+
+Adding `/admin/dashboard` left HR with two different "Dashboard" links pointing at two different pages — the shared top-level link (generic Breeze placeholder) and a second one inside the Admin dropdown (the real HR dashboard). Reported directly, plus a general ask to make HR's nav look more professional.
+
+Fixed by making "Dashboard" role-aware instead of duplicated: a single `$dashboardRoute` computed once at the top of `navigation.blade.php` (`admin.dashboard` for HR, `dashboard` for everyone else), reused by the brand logo link, the top-level nav-link, and the mobile equivalent — so HR's one "Dashboard" entry now goes straight to the real dashboard, and the redundant copy inside the Admin dropdown was removed entirely. Also added a small uppercase "Administration" section label at the top of the Admin dropdown (desktop) and above the admin links (mobile) for clearer visual grouping — the first section-label pattern in this project's nav, kept text-only/no icons to stay consistent with the app's existing plain-Tailwind visual language rather than introducing a new one.
+
+### Verification
+
+- 2 new tests in `DashboardTest`: HR's rendered nav contains the `admin.dashboard` URL and *no* occurrence of the generic `dashboard` URL; a regular employee's nav contains the generic URL and no `admin.dashboard` URL. Full suite: 134/134 passing.
+- Real HTTP: confirmed via regex extraction of every distinct `href` ending in `/dashboard` on the rendered page — HR sees exactly one, `/admin/dashboard`; a plain employee sees exactly one, `/dashboard`, with no "Administration" label visible to them at all.
+
+### Plan for next session
+
+Same as before — Phase 3 exports/scheduled reports next.

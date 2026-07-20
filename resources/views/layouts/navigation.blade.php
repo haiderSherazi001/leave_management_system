@@ -1,3 +1,10 @@
+@php
+    // HR's "Dashboard" is the real HR overview page, not the generic
+    // placeholder — avoids the same page existing under two different nav
+    // entries (top-level + inside the Admin dropdown).
+    $dashboardRoute = Auth::user()->isHr() ? 'admin.dashboard' : 'dashboard';
+@endphp
+
 <nav x-data="{ open: false }" class="bg-white border-b border-gray-100">
     <!-- Primary Navigation Menu -->
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -5,14 +12,14 @@
             <div class="flex">
                 <!-- Brand -->
                 <div class="shrink-0 flex items-center">
-                    <a href="{{ route('dashboard') }}" class="text-lg font-bold tracking-tight text-slate-800">
+                    <a href="{{ route($dashboardRoute) }}" class="text-lg font-bold tracking-tight text-slate-800">
                         LeaveDesk
                     </a>
                 </div>
 
                 <!-- Navigation Links -->
                 <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
-                    <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
+                    <x-nav-link :href="route($dashboardRoute)" :active="request()->routeIs($dashboardRoute)">
                         {{ __('Dashboard') }}
                     </x-nav-link>
                     <x-nav-link :href="route('attendance.check-in')" :active="request()->routeIs('attendance.check-in')">
@@ -44,7 +51,9 @@
                                     </button>
                                 </x-slot>
                                 <x-slot name="content">
-                                    <x-dropdown-link :href="route('admin.dashboard')">{{ __('Dashboard') }}</x-dropdown-link>
+                                    <div class="px-4 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                                        {{ __('Administration') }}
+                                    </div>
                                     <x-dropdown-link :href="route('admin.employees')">{{ __('Employees') }}</x-dropdown-link>
                                     <x-dropdown-link :href="route('admin.departments')">{{ __('Departments') }}</x-dropdown-link>
                                     <x-dropdown-link :href="route('admin.leave-types')">{{ __('Leave Types') }}</x-dropdown-link>
@@ -106,7 +115,7 @@
     <!-- Responsive Navigation Menu -->
     <div :class="{'block': open, 'hidden': ! open}" class="hidden sm:hidden">
         <div class="pt-2 pb-3 space-y-1">
-            <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
+            <x-responsive-nav-link :href="route($dashboardRoute)" :active="request()->routeIs($dashboardRoute)">
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('attendance.check-in')" :active="request()->routeIs('attendance.check-in')">
@@ -127,9 +136,9 @@
                 </x-responsive-nav-link>
             @endif
             @if (Auth::user()->isHr())
-                <x-responsive-nav-link :href="route('admin.dashboard')" :active="request()->routeIs('admin.dashboard')">
-                    {{ __('Dashboard') }}
-                </x-responsive-nav-link>
+                <div class="mt-2 pt-2 px-4 border-t border-gray-200 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    {{ __('Administration') }}
+                </div>
                 <x-responsive-nav-link :href="route('admin.employees')" :active="request()->routeIs('admin.employees')">
                     {{ __('Employees') }}
                 </x-responsive-nav-link>

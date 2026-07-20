@@ -40,6 +40,32 @@ class DashboardTest extends TestCase
         }
     }
 
+    /**
+     * For HR, every "Dashboard" nav entry (brand logo, top-level link, and
+     * the Admin dropdown which used to have its own separate copy) must
+     * point at the real HR dashboard — the generic placeholder URL should
+     * no longer appear anywhere in their nav.
+     */
+    public function test_hr_nav_consolidates_dashboard_to_a_single_destination(): void
+    {
+        $hr = User::factory()->hr()->create();
+
+        $html = $this->actingAs($hr)->get(route('admin.employees'))->getContent();
+
+        $this->assertStringContainsString(route('admin.dashboard'), $html);
+        $this->assertStringNotContainsString(route('dashboard'), $html);
+    }
+
+    public function test_employee_nav_dashboard_link_still_points_at_the_generic_dashboard(): void
+    {
+        $employee = User::factory()->create();
+
+        $html = $this->actingAs($employee)->get(route('leave.apply'))->getContent();
+
+        $this->assertStringContainsString(route('dashboard'), $html);
+        $this->assertStringNotContainsString(route('admin.dashboard'), $html);
+    }
+
     public function test_dashboard_counts_are_scoped_to_active_users_and_company_wide(): void
     {
         $today = now()->toDateString();
