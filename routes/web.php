@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AttendanceExportController;
 use App\Http\Controllers\ProfileController;
 use App\Livewire\Admin\Dashboard;
 use App\Livewire\Admin\Departments;
@@ -35,6 +36,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/leave/team-calendar', TeamCalendar::class)->name('leave.team-calendar');
 
     Route::get('/admin/dashboard', Dashboard::class)->name('admin.dashboard');
+    Route::get('/admin/attendance/export', AttendanceExportController::class)->name('admin.attendance.export');
     Route::get('/admin/employees', Employees::class)->name('admin.employees');
     Route::get('/admin/departments', Departments::class)->name('admin.departments');
     Route::get('/admin/leave-types', LeaveTypes::class)->name('admin.leave-types');

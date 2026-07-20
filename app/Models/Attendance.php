@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Enums\AttendanceStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Attendance extends Model
 {
@@ -29,5 +30,10 @@ class Attendance extends Model
             'check_out_at' => 'datetime',
             'status' => AttendanceStatus::class,
         ];
+    }
+
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 }

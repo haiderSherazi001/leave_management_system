@@ -28,4 +28,24 @@ class AttendanceFactory extends Factory
             'notes' => null,
         ];
     }
+
+    /**
+     * No absent() state is provided deliberately — a row with
+     * status='absent' never occurs in real data (nothing in the app ever
+     * writes one), so a factory state for it would misrepresent how
+     * absence is actually modeled: the total absence of a row.
+     */
+    public function late(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => AttendanceStatus::Late->value,
+        ]);
+    }
+
+    public function onLeave(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => AttendanceStatus::OnLeave->value,
+        ]);
+    }
 }
