@@ -479,6 +479,30 @@ Added `User::homeRouteName(): string` (`admin.dashboard` for HR, `dashboard` for
 - 1 new test in `AuthenticationTest`: HR posting valid credentials to `/login` redirects to `route('admin.dashboard')`, alongside the existing employee-login test asserting the generic `route('dashboard')`. Full suite: 140/140 passing.
 - Real HTTP: logged in as the real HR user, confirmed the `Location` response header on the login POST is `/admin/dashboard`; logged in as a real employee, confirmed it's still `/dashboard`.
 
+## 2026-07-20 — Scheduled monthly HR attendance reports, Phase 3 complete (branch: `feature/scheduled-hr-reports`)
+
+### Work done
+
+Final Phase 3 feature: HR now automatically receives an emailed attendance report for the previous month, on the 1st of every month at 8:00 AM PKT. First `Mailable` in this app (everything before this sent mail via Laravel Notifications' `MailMessage` builder) and first scheduled task (`routes/console.php` previously had only the stock `inspire` command). Fully reuses `AttendanceExportService`/`AttendanceExport` from the prior on-demand-export session — zero changes needed there.
+
+- New `App\Console\Commands\SendMonthlyAttendanceReport` (`report:monthly-attendance`, matches the one existing command's conventions) — queries active HR users, computes the previous calendar month via `CarbonImmutable::now()->subMonthNoOverflow()` (not plain `subMonth()`, which has a classic day-overflow bug run on a date like the 31st), sends synchronously (`Mail::to()->send()`, not `->queue()` — matches this app's existing "don't queue mail" convention).
+- `routes/console.php`: `Schedule::command(SendMonthlyAttendanceReport::class)->monthlyOn(1, '08:00')->timezone(config('app.timezone'))` — the explicit `->timezone()` call isn't in Laravel's default scheduler behavior (it otherwise evaluates against the server's system clock, not PKT) but matches this project's established, deliberate timezone-enforcement rigor from Phase 2.
+- New `App\Mail\MonthlyAttendanceReport` (modern `envelope()`/`content()`/`attachments()` Mailable API) — the Excel file is generated via `Excel::raw($export, 'Xlsx')` inside `Attachment::fromData()`'s lazy closure, entirely in memory, reusing the exact same `AttendanceExport` class from the on-demand export feature.
+- New `resources/views/emails/monthly-attendance-report.blade.php` — the app's first custom email Blade view (everything before this used Laravel's built-in Markdown `MailMessage` component). Deliberately plain HTML with **inline styles**, not Tailwind classes — email clients don't reliably process external stylesheets or `<style>` blocks, so this view looks and is built differently from every other Tailwind-based view in the app.
+
+### Bug found and fixed during manual verification
+
+`Excel::raw($export, Excel::XLSX)` failed with `Undefined constant Maatwebsite\Excel\Facades\Excel::XLSX` — the `XLSX` constant lives on the concrete `Maatwebsite\Excel\Excel` class, not the `Facades\Excel` proxy class facades don't inherit constants from the class they proxy, only methods via `__callStatic`. Fixed by using the literal string `'Xlsx'` (the constant's actual value) instead, with a comment explaining why. **The automated test suite did not catch this** — `Attachment::fromData()`'s data closure is lazy, so calling `$mail->attachments()` in a test (to check the array/filename) never actually invokes the closure body that calls `Excel::raw()`. Only running the command for real against the dev database surfaced it. Added a dedicated regression test afterward that calls `Excel::raw()` directly (bypassing the lazy closure) so this class of bug is now caught automatically — a concrete example of why this project's "verify against real MySQL/HTTP, don't just trust the test suite" habit exists.
+
+### Verification
+
+- 6 tests in `SendMonthlyAttendanceReportTest`: report sent to active HR only (inactive HR, Manager, Employee all excluded); no error and nothing sent when there are zero active HR users; correct previous-month subject; the `subMonthNoOverflow()` edge case (running on the 31st correctly lands on the shorter previous month, not overflowing back into the current month); the Excel attachment can actually be generated (the regression test above); attachment has the expected filename. Full suite: 145/145 passing.
+- `php artisan schedule:list` confirmed the entry registered correctly: `0 8 1 * *` running `report:monthly-attendance`.
+- Real MySQL + manual run: `php artisan report:monthly-attendance` against the live dev database (2 real active HR users) — sent successfully, confirmed in `storage/logs/laravel.log` (current `MAIL_MAILER=log`): correct subject ("Monthly Attendance Report — June 2026"), correct HTML body with the right date range, and a genuine `.xlsx` attachment (valid ZIP-signature binary, correct filename) for both recipients.
+- `feature/scheduled-hr-reports` merged into `main` once everything above was green.
+
+**Phase 3 (Reporting) is now complete**: HR Dashboard, on-demand payroll Excel export, and scheduled monthly email reports.
+
 ### Plan for next session
 
-Same as before — scheduled/automated HR reports is the remaining Phase 3 piece.
+Phase 3 done. Next per `CLAUDE.md`'s phase order is **Phase 4: Scale** (multi-level approvals, WhatsApp/SMS alerts, biometric/geo check-in, payroll integration) — not started, no work done toward it yet.
