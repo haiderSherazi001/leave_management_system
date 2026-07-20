@@ -44,6 +44,7 @@
                                     </button>
                                 </x-slot>
                                 <x-slot name="content">
+                                    <x-dropdown-link :href="route('admin.dashboard')">{{ __('Dashboard') }}</x-dropdown-link>
                                     <x-dropdown-link :href="route('admin.employees')">{{ __('Employees') }}</x-dropdown-link>
                                     <x-dropdown-link :href="route('admin.departments')">{{ __('Departments') }}</x-dropdown-link>
                                     <x-dropdown-link :href="route('admin.leave-types')">{{ __('Leave Types') }}</x-dropdown-link>
@@ -126,6 +127,9 @@
                 </x-responsive-nav-link>
             @endif
             @if (Auth::user()->isHr())
+                <x-responsive-nav-link :href="route('admin.dashboard')" :active="request()->routeIs('admin.dashboard')">
+                    {{ __('Dashboard') }}
+                </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('admin.employees')" :active="request()->routeIs('admin.employees')">
                     {{ __('Employees') }}
                 </x-responsive-nav-link>

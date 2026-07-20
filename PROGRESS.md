@@ -405,6 +405,23 @@ Fixed both: `DepartmentService::list()` now also selects `managers.is_active as 
 - 4 new tests in `AdminManagementTest`: Departments list flags a deactivated manager (and doesn't flag an active one); Employees list flags both a deactivated department and manager together (and doesn't flag active ones). Full suite: 129/129 passing.
 - Real MySQL + HTTP: temporarily deactivated the real `Morgan Manager` (`#1`, heads Engineering) in the dev database, confirmed both `/admin/departments` and `/admin/employees` render the "Deactivated" badge next to his name for every row referencing him, then reverted him back to active.
 
+## 2026-07-17 — Phase 3 kickoff: HR Dashboard (branch: `feature/hr-dashboard`)
+
+### Work done
+
+First Phase 3 feature: an HR-only `/admin/dashboard` page with four company-wide KPI cards — Present Today, Late Check-ins Today, On Leave Today, Pending Requests. Used a dedicated per-feature branch (`feature/hr-dashboard`) rather than a whole-phase branch like `phase-2` was, per an explicit request to isolate features going forward.
+
+- New `App\Services\DashboardService::attendanceOverview()` — three queries (present/late combined into one grouped-count query rather than two separate counts): `attendances` joined to `users` (`is_active = true`) for present/late counts; `leave_requests` (not `attendances.status='on_leave'`) for on-leave-today, same "leave_requests is the authoritative source" reasoning as `CalendarService`; a fresh, unscoped `leave_requests` pending count — deliberately not reusing `LeaveRequestService::pendingForApprover()`, which is manager-scoped by design (HR has no approval step of its own yet).
+- Two metric-definition decisions made explicitly before coding (not assumed): Present and Late are mutually exclusive counts (not overlapping), and all active roles (Employee/Manager/HR) count toward every card, since check-in/leave is open to everyone.
+- Used Eloquent (`Attendance::query()`, `LeaveRequest::query()`) rather than this project's usual `DB::table()` convention — explicit user request, and consistent with `CLAUDE.md`'s actual current guidance to use Eloquent where it's cleaner (this is a pure read-aggregation feature).
+- New `App\Livewire\Admin\Dashboard` + `resources/views/livewire/admin/dashboard.blade.php` — first stat-card UI pattern in the project (none existed before); matches the existing white-card shell used everywhere else, `mount()` uses the identical `abort_unless(Auth::user()->isHr(), 403)` pattern as every other admin page. Nav link added to both the desktop HR dropdown and mobile nav, as the first item ahead of Employees.
+
+### Verification
+
+- 3 new tests in `DashboardTest`: HR gets 200 over real HTTP, Employee/Manager both get 403, and a seeded scenario (2 present, 1 late, 1 inactive user's check-in excluded, 1 approved leave covering today, 2 pending requests under two different managers to prove the count is company-wide, plus a rejected request and a past approved request that must not be counted) asserts all four numbers exactly. Full suite: 132/132 passing.
+- Real MySQL + HTTP: seeded the identical scenario directly against the live dev database via tinker, confirmed `DashboardService::attendanceOverview()` returned the exact expected counts (2/1/1/2, with the inactive user correctly excluded and the two-different-managers pending count confirming company-wide scope, not manager-scoped). Logged in as HR over real HTTP, confirmed all four cards render with the right numbers and the nav link is present; logged in as a plain employee, confirmed 403. All seeded verification data removed afterward, confirmed stats returned to the pre-existing baseline (only real data: `onLeaveToday: 1` from an existing approved request, everything else 0).
+- `feature/hr-dashboard` merged into `main` once everything above was green.
+
 ### Plan for next session
 
-Same as before — **Phase 3, Reporting**, is next. No outstanding work from today's bug fixes.
+Continue Phase 3: next up is likely Excel/PDF attendance exports and/or scheduled HR reports, per `CLAUDE.md`'s Phase 3 scope. Not started yet — no packages (Laravel Excel, DomPDF) installed.
