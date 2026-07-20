@@ -465,3 +465,20 @@ Second Phase 3 feature: HR can export a payroll-ready attendance `.xlsx` for a c
 ### Plan for next session
 
 Continue Phase 3: scheduled/automated HR reports (the other half of `CLAUDE.md`'s Phase 3 scope) is the remaining piece — not started, no scheduler/queue-driven report job exists yet.
+
+## 2026-07-20 — HR lands on the real dashboard after login (branch: `main`)
+
+### Bug found and fixed
+
+Reported: HR logging in landed on the generic Breeze placeholder page (still just "You're logged in!"), and had to click "Dashboard" in the nav to reach `/admin/dashboard`. Traced to Breeze's `AuthenticatedSessionController::store()` hardcoding `redirect()->intended(route('dashboard', ...))` — not role-aware. Same hardcoded fallback existed in five more places across the untouched Breeze auth scaffolding (`EmailVerificationNotificationController`, `EmailVerificationPromptController`, `VerifyEmailController` ×2, `ConfirmablePasswordController`) — all fixed together since they're the identical gap, not just the one the user hit.
+
+Added `User::homeRouteName(): string` (`admin.dashboard` for HR, `dashboard` for everyone else) as the single source of truth, and pointed all 6 controllers plus `navigation.blade.php`'s `$dashboardRoute` (previously its own separate `isHr()` ternary, from the earlier nav-consolidation fix) at it — one place now decides "where does Dashboard go for this user," rather than the same logic living in seven places that could drift out of sync.
+
+### Verification
+
+- 1 new test in `AuthenticationTest`: HR posting valid credentials to `/login` redirects to `route('admin.dashboard')`, alongside the existing employee-login test asserting the generic `route('dashboard')`. Full suite: 140/140 passing.
+- Real HTTP: logged in as the real HR user, confirmed the `Location` response header on the login POST is `/admin/dashboard`; logged in as a real employee, confirmed it's still `/dashboard`.
+
+### Plan for next session
+
+Same as before — scheduled/automated HR reports is the remaining Phase 3 piece.

@@ -32,6 +32,19 @@ class AuthenticationTest extends TestCase
         $response->assertRedirect(route('dashboard', absolute: false));
     }
 
+    public function test_hr_is_redirected_to_the_hr_dashboard_after_login(): void
+    {
+        $hr = User::factory()->hr()->create();
+
+        $response = $this->post('/login', [
+            'email' => $hr->email,
+            'password' => 'password',
+        ]);
+
+        $this->assertAuthenticated();
+        $response->assertRedirect(route('admin.dashboard', absolute: false));
+    }
+
     public function test_users_can_not_authenticate_with_invalid_password(): void
     {
         $user = User::factory()->create();

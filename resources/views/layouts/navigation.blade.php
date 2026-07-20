@@ -1,8 +1,8 @@
 @php
-    // HR's "Dashboard" is the real HR overview page, not the generic
-    // placeholder — avoids the same page existing under two different nav
-    // entries (top-level + inside the Admin dropdown).
-    $dashboardRoute = Auth::user()->isHr() ? 'admin.dashboard' : 'dashboard';
+    // Same destination the post-login/email-verification redirects use
+    // (User::homeRouteName()) — keeps the nav and the auth flow agreeing
+    // on where "home" is for a given role.
+    $dashboardRoute = Auth::user()->homeRouteName();
 @endphp
 
 <nav x-data="{ open: false }" class="bg-white border-b border-gray-100">

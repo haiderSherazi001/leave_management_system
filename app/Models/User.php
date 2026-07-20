@@ -94,4 +94,14 @@ class User extends Authenticatable
     {
         return $this->role === UserRole::Hr;
     }
+
+    /**
+     * Where "Dashboard" takes this user — HR lands on the real HR
+     * dashboard rather than the generic placeholder, since it's the
+     * page they actually need after logging in.
+     */
+    public function homeRouteName(): string
+    {
+        return $this->isHr() ? 'admin.dashboard' : 'dashboard';
+    }
 }
