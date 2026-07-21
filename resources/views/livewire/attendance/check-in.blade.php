@@ -51,6 +51,14 @@
 
                             this.capturing = true;
 
+                            // Alpine's bare `$wire` magic only resolves inside expressions
+                            // Alpine itself evaluates (e.g. x-on attributes) — it's not
+                            // reliably in scope inside a native browser API callback like
+                            // getCurrentPosition's. Capturing `this.$wire` (which IS always
+                            // reachable via `this`) into a local before the async call
+                            // sidesteps that entirely.
+                            const $wire = this.$wire;
+
                             navigator.geolocation.getCurrentPosition(
                                 (position) => {
                                     this.capturing = false;
