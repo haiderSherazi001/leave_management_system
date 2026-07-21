@@ -187,7 +187,8 @@ class LeaveRequestNotificationTest extends TestCase
         Notification::assertSentTo(
             $hr,
             LeaveRequestAwaitingHrApprovalNotification::class,
-            fn ($notification) => $notification->toDatabase($hr)['leave_request_id'] === $leaveRequest->id,
+            fn ($notification) => $notification->toDatabase($hr)['leave_request_id'] === $leaveRequest->id
+                && $notification->toDatabase($hr)['is_self_submitted'] === false,
         );
         Notification::assertNotSentTo($inactiveHr, LeaveRequestAwaitingHrApprovalNotification::class);
     }
@@ -311,7 +312,11 @@ class LeaveRequestNotificationTest extends TestCase
             reason: 'Manager leave',
         );
 
-        Notification::assertSentTo($hr, LeaveRequestAwaitingHrApprovalNotification::class);
+        Notification::assertSentTo(
+            $hr,
+            LeaveRequestAwaitingHrApprovalNotification::class,
+            fn ($notification) => $notification->toDatabase($hr)['is_self_submitted'] === true,
+        );
         Notification::assertNotSentTo($topManager, NewLeaveRequestNotification::class);
     }
 
@@ -342,5 +347,46 @@ class LeaveRequestNotificationTest extends TestCase
         );
 
         Notification::assertNothingSent();
+    }
+
+    /**
+     * Regression guard for a real bug found via manual testing: wording that
+     * assumes a distinct approver ("X has approved Y's request") reads like
+     * a copy-paste glitch when X and Y are the same person, which happens
+     * whenever a Manager applies for their own leave.
+     */
+    public function test_hr_notification_wording_differs_for_a_managers_self_submitted_request(): void
+    {
+        $notifiable = User::factory()->hr()->create();
+
+        $selfSubmitted = new LeaveRequestAwaitingHrApprovalNotification(
+            leaveRequestId: 1,
+            employeeName: 'Evert Klein',
+            leaveTypeName: 'Annual',
+            startDate: '2026-08-01',
+            endDate: '2026-08-02',
+            totalDays: 2.0,
+            managerName: 'Evert Klein',
+            isSelfSubmitted: true,
+        );
+
+        $forwarded = new LeaveRequestAwaitingHrApprovalNotification(
+            leaveRequestId: 2,
+            employeeName: 'Jazmin Rippin',
+            leaveTypeName: 'Annual',
+            startDate: '2026-08-01',
+            endDate: '2026-08-02',
+            totalDays: 2.0,
+            managerName: 'Evert Klein',
+            isSelfSubmitted: false,
+        );
+
+        $selfSubmittedIntro = implode(' ', $selfSubmitted->toMail($notifiable)->introLines);
+        $forwardedIntro = implode(' ', $forwarded->toMail($notifiable)->introLines);
+
+        $this->assertStringNotContainsString("has approved Evert Klein's", $selfSubmittedIntro);
+        $this->assertStringContainsString('Evert Klein (a Manager) has submitted their own', $selfSubmittedIntro);
+
+        $this->assertStringContainsString("Evert Klein has approved Jazmin Rippin's", $forwardedIntro);
     }
 }

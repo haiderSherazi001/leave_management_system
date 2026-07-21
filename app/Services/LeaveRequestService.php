@@ -496,6 +496,7 @@ final class LeaveRequestService
         $leaveTypeName = DB::table('leave_types')->where('id', $leaveRequest->leave_type_id)->value('name') ?? 'Leave';
 
         $hrUsers = User::where('role', UserRole::Hr)->where('is_active', true)->get();
+        $isSelfSubmitted = $leaveRequest->user_id === $manager->id;
 
         foreach ($hrUsers as $hrUser) {
             $hrUser->notify(new LeaveRequestAwaitingHrApprovalNotification(
@@ -506,6 +507,7 @@ final class LeaveRequestService
                 endDate: $leaveRequest->end_date->toDateString(),
                 totalDays: (float) $leaveRequest->total_days,
                 managerName: $manager->name,
+                isSelfSubmitted: $isSelfSubmitted,
             ));
         }
     }
