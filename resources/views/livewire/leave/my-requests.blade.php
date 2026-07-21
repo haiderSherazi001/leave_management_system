@@ -35,14 +35,20 @@
                         <td class="py-2 pr-4">
                             <span @class([
                                 'px-2 py-1 rounded-full text-xs font-medium',
-                                'bg-yellow-100 text-yellow-800' => $request->status === 'pending',
+                                'bg-yellow-100 text-yellow-800' => in_array($request->status, ['pending_manager', 'pending_hr']),
                                 'bg-green-100 text-green-800' => $request->status === 'approved',
                                 'bg-red-100 text-red-800' => $request->status === 'rejected',
                             ])>
-                                {{ ucfirst($request->status) }}
+                                {{ \App\Enums\LeaveRequestStatus::from($request->status)->label() }}
                             </span>
                         </td>
-                        <td class="py-2 pr-4">{{ $request->approver_name ?? '—' }}</td>
+                        <td class="py-2 pr-4">
+                            @if ($request->hr_approver_name)
+                                {{ $request->approver_name }} &rarr; {{ $request->hr_approver_name }}
+                            @else
+                                {{ $request->approver_name ?? '—' }}
+                            @endif
+                        </td>
                         <td class="py-2 pr-4">{{ $request->decision_note ?? '—' }}</td>
                     </tr>
                 @endforeach

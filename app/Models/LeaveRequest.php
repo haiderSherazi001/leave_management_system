@@ -23,6 +23,7 @@ class LeaveRequest extends Model
         'reason',
         'status',
         'approver_id',
+        'hr_approver_id',
         'decision_note',
         'decided_at',
     ];
@@ -52,5 +53,10 @@ class LeaveRequest extends Model
     public function approver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approver_id');
+    }
+
+    public function hrApprover(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'hr_approver_id');
     }
 }

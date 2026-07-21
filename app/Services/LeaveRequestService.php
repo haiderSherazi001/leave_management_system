@@ -8,6 +8,7 @@ use App\Enums\LeaveRequestStatus;
 use App\Enums\UserRole;
 use App\Models\LeaveRequest;
 use App\Models\User;
+use App\Notifications\LeaveRequestAwaitingHrApprovalNotification;
 use App\Notifications\LeaveRequestStatusNotification;
 use App\Notifications\NewLeaveRequestNotification;
 use Carbon\CarbonImmutable;
@@ -106,7 +107,7 @@ final class LeaveRequestService
             'is_half_day' => $isHalfDay,
             'total_days' => $totalDays,
             'reason' => $reason,
-            'status' => $isLeadership ? LeaveRequestStatus::Approved->value : LeaveRequestStatus::Pending->value,
+            'status' => $isLeadership ? LeaveRequestStatus::Approved->value : LeaveRequestStatus::PendingManager->value,
             'approver_id' => $isLeadership ? $userId : null,
             'decision_note' => $isLeadership ? 'Auto-approved' : null,
             'decided_at' => $isLeadership ? now() : null,
@@ -134,7 +135,11 @@ final class LeaveRequestService
     ): bool {
         $query = DB::table('leave_requests')
             ->where('user_id', $userId)
-            ->whereIn('status', [LeaveRequestStatus::Pending->value, LeaveRequestStatus::Approved->value])
+            ->whereIn('status', [
+                LeaveRequestStatus::PendingManager->value,
+                LeaveRequestStatus::PendingHR->value,
+                LeaveRequestStatus::Approved->value,
+            ])
             ->where('start_date', '<=', $endDate->toDateString())
             ->where('end_date', '>=', $startDate->toDateString());
 
@@ -146,8 +151,11 @@ final class LeaveRequestService
     }
 
     /**
-     * Authorization is enforced here (via LeaveRequestPolicy), not just in the
-     * calling UI, so it can't be bypassed by any future caller of this method.
+     * Manager-stage approval: forwards a request from PendingManager to
+     * PendingHR. This does not deduct balance or touch attendance — those
+     * only happen once HR gives the final sign-off in approveByHr().
+     * Authorization is enforced here (via LeaveRequestPolicy), not just in
+     * the calling UI, so it can't be bypassed by any future caller.
      */
     public function approve(int $leaveRequestId, User $approver, ?string $note = null): void
     {
@@ -159,8 +167,40 @@ final class LeaveRequestService
 
         Gate::forUser($approver)->authorize('approve', $leaveRequest);
 
-        if ($leaveRequest->status !== LeaveRequestStatus::Pending) {
-            throw new DomainException('Only pending requests can be approved.');
+        if ($leaveRequest->status !== LeaveRequestStatus::PendingManager) {
+            throw new DomainException('Only requests pending manager approval can be approved at this stage.');
+        }
+
+        DB::table('leave_requests')
+            ->where('id', $leaveRequest->id)
+            ->update([
+                'status' => LeaveRequestStatus::PendingHR->value,
+                'approver_id' => $approver->id,
+                'decision_note' => $note,
+                'updated_at' => now(),
+            ]);
+
+        $this->notifyHrOfPendingApproval($leaveRequest, $approver);
+    }
+
+    /**
+     * HR-stage final approval: PendingHR -> Approved. This is the point at
+     * which balance is actually deducted and leave is linked into
+     * attendance — the manager's earlier approve() only forwards the
+     * request, it doesn't finalize it.
+     */
+    public function approveByHr(int $leaveRequestId, User $hrApprover, ?string $note = null): void
+    {
+        $leaveRequest = LeaveRequest::find($leaveRequestId);
+
+        if ($leaveRequest === null) {
+            throw new DomainException('Leave request not found.');
+        }
+
+        Gate::forUser($hrApprover)->authorize('approve', $leaveRequest);
+
+        if ($leaveRequest->status !== LeaveRequestStatus::PendingHR) {
+            throw new DomainException('Only requests pending HR approval can be approved at this stage.');
         }
 
         $year = $leaveRequest->start_date->year;
@@ -170,12 +210,12 @@ final class LeaveRequestService
             throw new DomainException('Employee no longer has sufficient balance for this request.');
         }
 
-        DB::transaction(function () use ($leaveRequest, $approver, $note, $year): void {
+        DB::transaction(function () use ($leaveRequest, $hrApprover, $note, $year): void {
             DB::table('leave_requests')
                 ->where('id', $leaveRequest->id)
                 ->update([
                     'status' => LeaveRequestStatus::Approved->value,
-                    'approver_id' => $approver->id,
+                    'hr_approver_id' => $hrApprover->id,
                     'decision_note' => $note,
                     'decided_at' => now(),
                     'updated_at' => now(),
@@ -191,9 +231,17 @@ final class LeaveRequestService
 
         // Outside the transaction: neither of these must be able to roll back a real approval.
         $this->linkApprovedLeaveToAttendance($leaveRequest);
-        $this->notifyEmployeeOfDecision($leaveRequest, $approver, $note, LeaveRequestStatus::Approved);
+        $this->notifyEmployeeOfDecision($leaveRequest, $hrApprover, $note, LeaveRequestStatus::Approved);
     }
 
+    /**
+     * Either stage's approver can reject outright — a manager rejecting a
+     * PendingManager request, or HR rejecting a PendingHR one — and it's
+     * always final. The rejecting approver is recorded in whichever
+     * approver column matches the stage they rejected at, so approver_id
+     * and hr_approver_id together still form an accurate trail of who
+     * touched the request.
+     */
     public function reject(int $leaveRequestId, User $approver, ?string $note = null): void
     {
         $leaveRequest = LeaveRequest::find($leaveRequestId);
@@ -204,15 +252,17 @@ final class LeaveRequestService
 
         Gate::forUser($approver)->authorize('reject', $leaveRequest);
 
-        if ($leaveRequest->status !== LeaveRequestStatus::Pending) {
+        if (! in_array($leaveRequest->status, [LeaveRequestStatus::PendingManager, LeaveRequestStatus::PendingHR], true)) {
             throw new DomainException('Only pending requests can be rejected.');
         }
+
+        $isHrStage = $leaveRequest->status === LeaveRequestStatus::PendingHR;
 
         DB::table('leave_requests')
             ->where('id', $leaveRequest->id)
             ->update([
                 'status' => LeaveRequestStatus::Rejected->value,
-                'approver_id' => $approver->id,
+                $isHrStage ? 'hr_approver_id' : 'approver_id' => $approver->id,
                 'decision_note' => $note,
                 'decided_at' => now(),
                 'updated_at' => now(),
@@ -229,6 +279,7 @@ final class LeaveRequestService
         return DB::table('leave_requests')
             ->join('leave_types', 'leave_types.id', '=', 'leave_requests.leave_type_id')
             ->leftJoin('users as approvers', 'approvers.id', '=', 'leave_requests.approver_id')
+            ->leftJoin('users as hr_approvers', 'hr_approvers.id', '=', 'leave_requests.hr_approver_id')
             ->where('leave_requests.user_id', $userId)
             ->select(
                 'leave_requests.id',
@@ -240,6 +291,7 @@ final class LeaveRequestService
                 'leave_requests.status',
                 'leave_requests.decision_note',
                 'approvers.name as approver_name',
+                'hr_approvers.name as hr_approver_name',
             )
             ->orderByDesc('leave_requests.created_at')
             ->get()
@@ -247,14 +299,14 @@ final class LeaveRequestService
     }
 
     /**
-     * Pending requests visible to a manager: their direct reports, plus
-     * anyone whose department is managed by them but who has no direct
-     * manager of their own. An employee's direct manager_id always takes
-     * priority over their department's manager — the department manager is
-     * a fallback, not a second, parallel approver — so each employee has
-     * exactly one assigned manager, never two. Phase 1 scope is
-     * manager-only — HR does not see this queue (multi-level approval is
-     * Phase 4).
+     * PendingManager requests visible to a manager: their direct reports,
+     * plus anyone whose department is managed by them but who has no
+     * direct manager of their own. An employee's direct manager_id always
+     * takes priority over their department's manager — the department
+     * manager is a fallback, not a second, parallel approver — so each
+     * employee has exactly one assigned manager, never two. This is the
+     * first of two approval stages; approving here only forwards the
+     * request to HR (see pendingForHr()), it doesn't finalize it.
      *
      * @return array<int, object>
      */
@@ -264,7 +316,7 @@ final class LeaveRequestService
             ->join('users', 'users.id', '=', 'leave_requests.user_id')
             ->leftJoin('departments', 'departments.id', '=', 'users.department_id')
             ->join('leave_types', 'leave_types.id', '=', 'leave_requests.leave_type_id')
-            ->where('leave_requests.status', LeaveRequestStatus::Pending->value)
+            ->where('leave_requests.status', LeaveRequestStatus::PendingManager->value)
             ->where(function ($query) use ($managerId): void {
                 $query->where('users.manager_id', $managerId)
                     ->orWhere(function ($query) use ($managerId): void {
@@ -281,6 +333,38 @@ final class LeaveRequestService
                 'leave_requests.is_half_day',
                 'leave_requests.total_days',
                 'leave_requests.reason',
+            )
+            ->orderBy('leave_requests.start_date')
+            ->get()
+            ->all();
+    }
+
+    /**
+     * Company-wide PendingHR requests — every request a manager has
+     * already forwarded and that now needs HR's final sign-off. Unlike
+     * pendingForApprover(), this isn't scoped to any one manager's team:
+     * HR reviews requests for the whole company.
+     *
+     * @return array<int, object>
+     */
+    public function pendingForHr(): array
+    {
+        return DB::table('leave_requests')
+            ->join('users', 'users.id', '=', 'leave_requests.user_id')
+            ->join('leave_types', 'leave_types.id', '=', 'leave_requests.leave_type_id')
+            ->leftJoin('users as managers', 'managers.id', '=', 'leave_requests.approver_id')
+            ->where('leave_requests.status', LeaveRequestStatus::PendingHR->value)
+            ->select(
+                'leave_requests.id',
+                'users.name as employee_name',
+                'leave_types.name as leave_type_name',
+                'leave_requests.start_date',
+                'leave_requests.end_date',
+                'leave_requests.is_half_day',
+                'leave_requests.total_days',
+                'leave_requests.reason',
+                'leave_requests.decision_note as manager_note',
+                'managers.name as manager_name',
             )
             ->orderBy('leave_requests.start_date')
             ->get()
@@ -375,6 +459,33 @@ final class LeaveRequestService
             totalDays: $totalDays,
             reason: $reason,
         ));
+    }
+
+    /**
+     * Notifies every active HR user once a manager has forwarded a request
+     * to the final approval stage. Unlike manager notification (one
+     * assigned manager per employee), HR has no per-employee assignment,
+     * so every active HR user is notified — same recipient set used by
+     * the scheduled monthly report.
+     */
+    private function notifyHrOfPendingApproval(LeaveRequest $leaveRequest, User $manager): void
+    {
+        $employeeName = DB::table('users')->where('id', $leaveRequest->user_id)->value('name') ?? 'An employee';
+        $leaveTypeName = DB::table('leave_types')->where('id', $leaveRequest->leave_type_id)->value('name') ?? 'Leave';
+
+        $hrUsers = User::where('role', UserRole::Hr)->where('is_active', true)->get();
+
+        foreach ($hrUsers as $hrUser) {
+            $hrUser->notify(new LeaveRequestAwaitingHrApprovalNotification(
+                leaveRequestId: $leaveRequest->id,
+                employeeName: $employeeName,
+                leaveTypeName: $leaveTypeName,
+                startDate: $leaveRequest->start_date->toDateString(),
+                endDate: $leaveRequest->end_date->toDateString(),
+                totalDays: (float) $leaveRequest->total_days,
+                managerName: $manager->name,
+            ));
+        }
     }
 
     /**

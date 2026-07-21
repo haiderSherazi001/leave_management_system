@@ -1,10 +1,10 @@
 <div class="py-12">
     <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-    <h2 class="font-semibold text-xl text-gray-800 leading-tight">{{ __('Pending Approvals') }}</h2>
+    <h2 class="font-semibold text-xl text-gray-800 leading-tight">{{ __('HR Leave Approvals') }}</h2>
 
     <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
-        <h3 class="text-lg font-medium text-gray-900 mb-1">Pending Approvals</h3>
-        <p class="text-sm text-gray-500 mb-4">Approving forwards a request to HR for final sign-off; rejecting is final.</p>
+        <h3 class="text-lg font-medium text-gray-900 mb-1">Awaiting Final Approval</h3>
+        <p class="text-sm text-gray-500 mb-4">Requests already approved by a manager, awaiting your final sign-off.</p>
 
     @if ($errorMessage)
         <div class="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
@@ -13,7 +13,7 @@
     @endif
 
     @if (count($requests) === 0)
-        <p class="text-sm text-gray-500">No pending leave requests.</p>
+        <p class="text-sm text-gray-500">No leave requests are awaiting HR approval.</p>
     @else
         <div class="space-y-4">
             @foreach ($requests as $request)
@@ -29,6 +29,12 @@
                                 ({{ $request->total_days }} day{{ $request->total_days == 1 ? '' : 's' }})
                             </p>
                             <p class="text-sm text-gray-600 mt-1">{{ $request->reason }}</p>
+                            <p class="text-xs text-gray-400 mt-1">
+                                Approved by manager: {{ $request->manager_name ?? '—' }}
+                                @if ($request->manager_note)
+                                    &middot; "{{ $request->manager_note }}"
+                                @endif
+                            </p>
                         </div>
                     </div>
 

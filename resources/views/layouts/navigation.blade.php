@@ -54,6 +54,7 @@
                                     <div class="px-4 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">
                                         {{ __('Administration') }}
                                     </div>
+                                    <x-dropdown-link :href="route('admin.leave-approvals')">{{ __('Leave Approvals') }}</x-dropdown-link>
                                     <x-dropdown-link :href="route('admin.employees')">{{ __('Employees') }}</x-dropdown-link>
                                     <x-dropdown-link :href="route('admin.departments')">{{ __('Departments') }}</x-dropdown-link>
                                     <x-dropdown-link :href="route('admin.leave-types')">{{ __('Leave Types') }}</x-dropdown-link>
@@ -139,6 +140,9 @@
                 <div class="mt-2 pt-2 px-4 border-t border-gray-200 text-xs font-semibold text-gray-400 uppercase tracking-wider">
                     {{ __('Administration') }}
                 </div>
+                <x-responsive-nav-link :href="route('admin.leave-approvals')" :active="request()->routeIs('admin.leave-approvals')">
+                    {{ __('Leave Approvals') }}
+                </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('admin.employees')" :active="request()->routeIs('admin.employees')">
                     {{ __('Employees') }}
                 </x-responsive-nav-link>

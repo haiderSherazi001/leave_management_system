@@ -87,19 +87,19 @@ class DashboardTest extends TestCase
             'end_date' => now()->addDay()->toDateString(),
         ]);
 
-        // Pending requests under two different managers — the count must be
-        // company-wide, not scoped to any single manager's team.
+        // Pending requests under two different managers, one at each
+        // approval stage — the count must be company-wide, not scoped to
+        // any single manager's team, and must include both stages.
         $managerA = User::factory()->manager()->create();
         $managerB = User::factory()->manager()->create();
         LeaveRequest::factory()->create([
             'leave_type_id' => $leaveType->id,
             'user_id' => User::factory()->create(['manager_id' => $managerA->id])->id,
-            'status' => 'pending',
+            'status' => 'pending_manager',
         ]);
-        LeaveRequest::factory()->create([
+        LeaveRequest::factory()->pendingHr()->create([
             'leave_type_id' => $leaveType->id,
             'user_id' => User::factory()->create(['manager_id' => $managerB->id])->id,
-            'status' => 'pending',
         ]);
 
         // A rejected request and an approved-but-past request must not be counted anywhere.

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use App\Livewire\Admin\LeaveApprovals;
 use App\Livewire\Leave\ApprovalQueue;
 use App\Livewire\Leave\RequestForm;
 use App\Models\Holiday;
@@ -29,11 +30,13 @@ class LeaveRequestWorkflowTest extends TestCase
     public function test_leave_pages_render_successfully_over_http(): void
     {
         $manager = User::factory()->manager()->create();
+        $hr = User::factory()->hr()->create();
         $employee = User::factory()->create(['manager_id' => $manager->id]);
 
         $this->actingAs($employee)->get(route('leave.apply'))->assertOk();
         $this->actingAs($employee)->get(route('leave.my-requests'))->assertOk();
         $this->actingAs($manager)->get(route('leave.approvals'))->assertOk();
+        $this->actingAs($hr)->get(route('admin.leave-approvals'))->assertOk();
     }
 
     public function test_upcoming_holidays_are_shown_on_the_apply_for_leave_page(): void
@@ -85,7 +88,7 @@ class LeaveRequestWorkflowTest extends TestCase
         $this->assertDatabaseHas('leave_requests', [
             'user_id' => $employee->id,
             'leave_type_id' => $leaveType->id,
-            'status' => 'pending',
+            'status' => 'pending_manager',
             'total_days' => 2,
         ]);
     }
@@ -116,7 +119,7 @@ class LeaveRequestWorkflowTest extends TestCase
         $this->assertDatabaseCount('leave_requests', 0);
     }
 
-    public function test_manager_can_approve_a_pending_request_and_balance_is_deducted(): void
+    public function test_manager_approval_forwards_to_hr_without_deducting_balance(): void
     {
         $manager = User::factory()->manager()->create();
         $employee = User::factory()->create(['manager_id' => $manager->id]);
@@ -136,7 +139,7 @@ class LeaveRequestWorkflowTest extends TestCase
             'start_date' => now()->addDays(3)->toDateString(),
             'end_date' => now()->addDays(5)->toDateString(),
             'total_days' => 3,
-            'status' => 'pending',
+            'status' => 'pending_manager',
         ]);
 
         $this->actingAs($manager);
@@ -147,14 +150,65 @@ class LeaveRequestWorkflowTest extends TestCase
 
         $this->assertDatabaseHas('leave_requests', [
             'id' => $leaveRequest->id,
+            'status' => 'pending_hr',
+            'approver_id' => $manager->id,
+            'hr_approver_id' => null,
+            'decided_at' => null,
+        ]);
+
+        $this->assertDatabaseHas('leave_balances', [
+            'user_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'used_days' => 0,
+        ]);
+    }
+
+    public function test_hr_final_approval_deducts_balance_and_links_attendance(): void
+    {
+        $manager = User::factory()->manager()->create();
+        $hr = User::factory()->hr()->create();
+        $employee = User::factory()->create(['manager_id' => $manager->id]);
+        $leaveType = LeaveType::factory()->create();
+
+        LeaveBalance::factory()->create([
+            'user_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'year' => now()->year,
+            'allocated_days' => 10,
+            'used_days' => 0,
+        ]);
+
+        $leaveRequest = LeaveRequest::factory()->pendingHr()->create([
+            'user_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'approver_id' => $manager->id,
+            'start_date' => now()->addDays(3)->toDateString(),
+            'end_date' => now()->addDays(5)->toDateString(),
+            'total_days' => 3,
+        ]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(LeaveApprovals::class)
+            ->call('approve', $leaveRequest->id)
+            ->assertSet('errorMessage', null);
+
+        $this->assertDatabaseHas('leave_requests', [
+            'id' => $leaveRequest->id,
             'status' => 'approved',
             'approver_id' => $manager->id,
+            'hr_approver_id' => $hr->id,
         ]);
 
         $this->assertDatabaseHas('leave_balances', [
             'user_id' => $employee->id,
             'leave_type_id' => $leaveType->id,
             'used_days' => 3,
+        ]);
+
+        $this->assertDatabaseHas('attendances', [
+            'user_id' => $employee->id,
+            'date' => now()->addDays(3)->toDateString(),
         ]);
     }
 
@@ -167,20 +221,29 @@ class LeaveRequestWorkflowTest extends TestCase
             ->assertForbidden();
     }
 
-    /**
-     * Multi-level approval (manager -> HR) is Phase 4 scope. In Phase 1, HR
-     * has no role in the leave approval workflow at all.
-     */
-    public function test_hr_cannot_access_the_approval_queue(): void
+    public function test_employee_cannot_access_the_hr_approval_inbox(): void
     {
-        $hr = User::factory()->hr()->create();
+        $employee = User::factory()->create();
 
-        $this->actingAs($hr)
-            ->get(route('leave.approvals'))
+        $this->actingAs($employee)
+            ->get(route('admin.leave-approvals'))
             ->assertForbidden();
     }
 
-    public function test_hr_cannot_approve_or_reject_a_leave_request_even_by_calling_the_service_directly(): void
+    public function test_manager_cannot_access_the_hr_approval_inbox(): void
+    {
+        $manager = User::factory()->manager()->create();
+
+        $this->actingAs($manager)
+            ->get(route('admin.leave-approvals'))
+            ->assertForbidden();
+    }
+
+    /**
+     * HR only has a say once a request reaches the PendingHR stage — while
+     * it's still PendingManager, only the assigned manager can act on it.
+     */
+    public function test_hr_cannot_approve_or_reject_a_request_still_pending_manager_approval(): void
     {
         $hr = User::factory()->hr()->create();
         $manager = User::factory()->manager()->create();
@@ -190,7 +253,7 @@ class LeaveRequestWorkflowTest extends TestCase
         $leaveRequest = LeaveRequest::factory()->create([
             'user_id' => $employee->id,
             'leave_type_id' => $leaveType->id,
-            'status' => 'pending',
+            'status' => 'pending_manager',
         ]);
 
         $service = $this->app->make(LeaveRequestService::class);
@@ -198,6 +261,30 @@ class LeaveRequestWorkflowTest extends TestCase
         $this->expectException(AuthorizationException::class);
 
         $service->approve($leaveRequest->id, $hr);
+    }
+
+    /**
+     * Symmetric to the HR case above: once a request has been forwarded to
+     * HR, the manager who forwarded it (or any other manager) can no longer
+     * act on it — only HR can.
+     */
+    public function test_manager_cannot_approve_a_request_pending_hr_approval(): void
+    {
+        $manager = User::factory()->manager()->create();
+        $employee = User::factory()->create(['manager_id' => $manager->id]);
+        $leaveType = LeaveType::factory()->create();
+
+        $leaveRequest = LeaveRequest::factory()->pendingHr()->create([
+            'user_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'approver_id' => $manager->id,
+        ]);
+
+        $service = $this->app->make(LeaveRequestService::class);
+
+        $this->expectException(AuthorizationException::class);
+
+        $service->approve($leaveRequest->id, $manager);
     }
 
     public function test_manager_only_sees_pending_requests_from_their_own_team(): void
@@ -213,13 +300,13 @@ class LeaveRequestWorkflowTest extends TestCase
         LeaveRequest::factory()->create([
             'user_id' => $employeeUnderA->id,
             'leave_type_id' => $leaveType->id,
-            'status' => 'pending',
+            'status' => 'pending_manager',
         ]);
 
         LeaveRequest::factory()->create([
             'user_id' => $employeeUnderB->id,
             'leave_type_id' => $leaveType->id,
-            'status' => 'pending',
+            'status' => 'pending_manager',
         ]);
 
         $this->actingAs($managerA);
@@ -302,7 +389,7 @@ class LeaveRequestWorkflowTest extends TestCase
         $leaveRequest = LeaveRequest::factory()->create([
             'user_id' => $employeeUnderB->id,
             'leave_type_id' => $leaveType->id,
-            'status' => 'pending',
+            'status' => 'pending_manager',
         ]);
 
         $this->actingAs($managerA);
@@ -313,7 +400,7 @@ class LeaveRequestWorkflowTest extends TestCase
 
         $this->assertDatabaseHas('leave_requests', [
             'id' => $leaveRequest->id,
-            'status' => 'pending',
+            'status' => 'pending_manager',
         ]);
     }
 
@@ -481,7 +568,7 @@ class LeaveRequestWorkflowTest extends TestCase
 
         $this->assertDatabaseHas('leave_requests', [
             'id' => $leaveRequestId,
-            'status' => 'pending',
+            'status' => 'pending_manager',
             'approver_id' => null,
         ]);
 
@@ -490,5 +577,117 @@ class LeaveRequestWorkflowTest extends TestCase
             'leave_type_id' => $leaveType->id,
             'used_days' => 0,
         ]);
+    }
+
+    public function test_hr_inbox_shows_pending_hr_requests_company_wide_regardless_of_manager(): void
+    {
+        $managerA = User::factory()->manager()->create();
+        $managerB = User::factory()->manager()->create();
+        $hr = User::factory()->hr()->create();
+
+        $employeeUnderA = User::factory()->create(['manager_id' => $managerA->id]);
+        $employeeUnderB = User::factory()->create(['manager_id' => $managerB->id]);
+        $leaveType = LeaveType::factory()->create();
+
+        LeaveRequest::factory()->pendingHr()->create([
+            'user_id' => $employeeUnderA->id,
+            'leave_type_id' => $leaveType->id,
+            'approver_id' => $managerA->id,
+        ]);
+
+        LeaveRequest::factory()->pendingHr()->create([
+            'user_id' => $employeeUnderB->id,
+            'leave_type_id' => $leaveType->id,
+            'approver_id' => $managerB->id,
+        ]);
+
+        // Still at the manager stage — must not appear in the HR inbox.
+        LeaveRequest::factory()->create([
+            'user_id' => $employeeUnderA->id,
+            'leave_type_id' => $leaveType->id,
+            'status' => 'pending_manager',
+        ]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(LeaveApprovals::class)
+            ->assertSee($employeeUnderA->name)
+            ->assertSee($employeeUnderB->name)
+            ->assertSee($managerA->name)
+            ->assertSee($managerB->name);
+    }
+
+    public function test_manager_rejecting_a_request_is_final_and_records_the_manager_as_approver(): void
+    {
+        $manager = User::factory()->manager()->create();
+        $employee = User::factory()->create(['manager_id' => $manager->id]);
+        $leaveType = LeaveType::factory()->create();
+
+        $leaveRequest = LeaveRequest::factory()->create([
+            'user_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'status' => 'pending_manager',
+        ]);
+
+        $this->actingAs($manager);
+
+        Livewire::test(ApprovalQueue::class)
+            ->call('reject', $leaveRequest->id)
+            ->assertSet('errorMessage', null);
+
+        $this->assertDatabaseHas('leave_requests', [
+            'id' => $leaveRequest->id,
+            'status' => 'rejected',
+            'approver_id' => $manager->id,
+            'hr_approver_id' => null,
+        ]);
+    }
+
+    public function test_hr_rejecting_a_request_records_hr_as_the_rejecting_approver(): void
+    {
+        $manager = User::factory()->manager()->create();
+        $hr = User::factory()->hr()->create();
+        $employee = User::factory()->create(['manager_id' => $manager->id]);
+        $leaveType = LeaveType::factory()->create();
+
+        $leaveRequest = LeaveRequest::factory()->pendingHr()->create([
+            'user_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'approver_id' => $manager->id,
+        ]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(LeaveApprovals::class)
+            ->call('reject', $leaveRequest->id)
+            ->assertSet('errorMessage', null);
+
+        $this->assertDatabaseHas('leave_requests', [
+            'id' => $leaveRequest->id,
+            'status' => 'rejected',
+            'approver_id' => $manager->id,
+            'hr_approver_id' => $hr->id,
+        ]);
+    }
+
+    /**
+     * An already-approved request is no longer at either pending stage, so
+     * LeaveRequestPolicy denies it outright (defense in depth) before the
+     * service even reaches its own status check.
+     */
+    public function test_a_request_cannot_be_hr_approved_twice(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $leaveType = LeaveType::factory()->create();
+
+        $leaveRequest = LeaveRequest::factory()->approved()->create([
+            'leave_type_id' => $leaveType->id,
+        ]);
+
+        $service = $this->app->make(LeaveRequestService::class);
+
+        $this->expectException(AuthorizationException::class);
+
+        $service->approveByHr($leaveRequest->id, $hr);
     }
 }

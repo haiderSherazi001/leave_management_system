@@ -26,6 +26,7 @@ class AttendanceAutoLinkTest extends TestCase
         WorkSchedule::factory()->create(['working_days' => [1, 2, 3, 4, 5]]);
 
         $manager = User::factory()->manager()->create();
+        $hr = User::factory()->hr()->create();
         $employee = User::factory()->create(['manager_id' => $manager->id]);
         $leaveType = LeaveType::factory()->create(['yearly_allocation_days' => 20]);
 
@@ -57,6 +58,7 @@ class AttendanceAutoLinkTest extends TestCase
         $this->assertDatabaseHas('leave_requests', ['id' => $id, 'total_days' => 2]);
 
         $service->approve($id, $manager);
+        $service->approveByHr($id, $hr);
 
         $this->assertDatabaseHas('attendances', [
             'user_id' => $employee->id,
@@ -77,6 +79,7 @@ class AttendanceAutoLinkTest extends TestCase
         WorkSchedule::factory()->create(['working_days' => [1, 2, 3, 4, 5]]);
 
         $manager = User::factory()->manager()->create();
+        $hr = User::factory()->hr()->create();
         $employee = User::factory()->create(['manager_id' => $manager->id]);
         $leaveType = LeaveType::factory()->create(['yearly_allocation_days' => 20]);
 
@@ -109,6 +112,7 @@ class AttendanceAutoLinkTest extends TestCase
         $this->assertDatabaseHas('leave_requests', ['id' => $id, 'total_days' => 2]);
 
         $service->approve($id, $manager);
+        $service->approveByHr($id, $hr);
 
         $this->assertDatabaseHas('attendances', [
             'user_id' => $employee->id,

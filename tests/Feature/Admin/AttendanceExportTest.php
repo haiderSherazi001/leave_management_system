@@ -50,14 +50,15 @@ class AttendanceExportTest extends TestCase
             'check_out_at' => $tuesday->setTime(17, 0),
         ]);
         // Wednesday: deliberately no attendance row and no leave -> Absent.
-        // approver_id is pinned to $employee (not left to the factory
-        // default) because LeaveRequestFactory::approved() otherwise
-        // spawns an extra, unrelated active user as the approver, which
-        // would silently inflate the row count below.
+        // approver_id/hr_approver_id are pinned to $employee (not left to
+        // the factory default) because LeaveRequestFactory::approved()
+        // otherwise spawns extra, unrelated active users as the approvers,
+        // which would silently inflate the row count below.
         LeaveRequest::factory()->approved()->create([
             'user_id' => $employee->id,
             'leave_type_id' => $leaveType->id,
             'approver_id' => $employee->id,
+            'hr_approver_id' => $employee->id,
             'start_date' => $thursday->toDateString(),
             'end_date' => $friday->toDateString(),
         ]);

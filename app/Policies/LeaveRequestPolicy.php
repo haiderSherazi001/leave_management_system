@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Policies;
 
+use App\Enums\LeaveRequestStatus;
 use App\Enums\UserRole;
 use App\Models\LeaveRequest;
 use App\Models\User;
@@ -12,18 +13,29 @@ use Illuminate\Support\Facades\DB;
 class LeaveRequestPolicy
 {
     /**
-     * Phase 1 scope: only the employee's assigned manager may approve or
-     * reject a leave request. Multi-level approval (manager -> HR) is
-     * Phase 4, so HR is intentionally denied here regardless of role.
+     * Who may act on a request depends on which stage it's currently in:
+     * the employee's assigned manager decides the PendingManager stage,
+     * and any HR user decides the final PendingHR stage. Approve and
+     * reject share the same rule — whoever can approve a request at its
+     * current stage can also reject it there.
      */
     public function approve(User $user, LeaveRequest $leaveRequest): bool
     {
-        return $this->isAssignedManagerOf($user, $leaveRequest);
+        return $this->canActAtCurrentStage($user, $leaveRequest);
     }
 
     public function reject(User $user, LeaveRequest $leaveRequest): bool
     {
-        return $this->isAssignedManagerOf($user, $leaveRequest);
+        return $this->canActAtCurrentStage($user, $leaveRequest);
+    }
+
+    private function canActAtCurrentStage(User $user, LeaveRequest $leaveRequest): bool
+    {
+        return match ($leaveRequest->status) {
+            LeaveRequestStatus::PendingManager => $this->isAssignedManagerOf($user, $leaveRequest),
+            LeaveRequestStatus::PendingHR => $user->role === UserRole::Hr,
+            default => false,
+        };
     }
 
     /**

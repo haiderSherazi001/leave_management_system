@@ -47,10 +47,12 @@ final class DashboardService
             ->count();
 
         // Company-wide, unlike LeaveRequestService::pendingForApprover()
-        // which is scoped to a single manager's team — HR has no approval
-        // step of its own yet (multi-level approval is Phase 4), so this is
-        // simply every request still awaiting a manager's decision.
-        $pendingRequests = LeaveRequest::where('status', LeaveRequestStatus::Pending)->count();
+        // which is scoped to a single manager's team — counts every request
+        // still awaiting a decision at either approval stage (manager or HR).
+        $pendingRequests = LeaveRequest::whereIn('status', [
+            LeaveRequestStatus::PendingManager,
+            LeaveRequestStatus::PendingHR,
+        ])->count();
 
         return [
             'presentToday' => $statusCounts[AttendanceStatus::Present->value] ?? 0,

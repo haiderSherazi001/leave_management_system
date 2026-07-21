@@ -6,6 +6,7 @@ use App\Livewire\Admin\Dashboard;
 use App\Livewire\Admin\Departments;
 use App\Livewire\Admin\Employees;
 use App\Livewire\Admin\Holidays;
+use App\Livewire\Admin\LeaveApprovals;
 use App\Livewire\Admin\LeaveTypes;
 use App\Livewire\Admin\WorkSchedule;
 use App\Livewire\Attendance\CheckIn;
@@ -35,6 +36,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/admin/dashboard', Dashboard::class)->name('admin.dashboard');
     Route::get('/admin/attendance/export', AttendanceExportController::class)->name('admin.attendance.export');
+    Route::get('/admin/leave-approvals', LeaveApprovals::class)->name('admin.leave-approvals');
     Route::get('/admin/employees', Employees::class)->name('admin.employees');
     Route::get('/admin/departments', Departments::class)->name('admin.departments');
     Route::get('/admin/leave-types', LeaveTypes::class)->name('admin.leave-types');

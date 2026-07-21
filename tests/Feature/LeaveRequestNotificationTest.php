@@ -10,6 +10,7 @@ use App\Models\LeaveBalance;
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\User;
+use App\Notifications\LeaveRequestAwaitingHrApprovalNotification;
 use App\Notifications\LeaveRequestStatusNotification;
 use App\Notifications\NewLeaveRequestNotification;
 use App\Services\LeaveRequestService;
@@ -164,11 +165,39 @@ class LeaveRequestNotificationTest extends TestCase
         Notification::assertNothingSent();
     }
 
-    public function test_employee_is_notified_when_request_is_approved(): void
+    public function test_hr_is_notified_when_a_manager_forwards_a_request(): void
     {
         Notification::fake();
 
         $manager = User::factory()->manager()->create();
+        $hr = User::factory()->hr()->create();
+        $inactiveHr = User::factory()->hr()->inactive()->create();
+        $employee = User::factory()->create(['manager_id' => $manager->id]);
+        $leaveType = LeaveType::factory()->create();
+
+        $leaveRequest = LeaveRequest::factory()->create([
+            'user_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'status' => 'pending_manager',
+        ]);
+
+        $service = $this->app->make(LeaveRequestService::class);
+        $service->approve($leaveRequest->id, $manager);
+
+        Notification::assertSentTo(
+            $hr,
+            LeaveRequestAwaitingHrApprovalNotification::class,
+            fn ($notification) => $notification->toDatabase($hr)['leave_request_id'] === $leaveRequest->id,
+        );
+        Notification::assertNotSentTo($inactiveHr, LeaveRequestAwaitingHrApprovalNotification::class);
+    }
+
+    public function test_employee_is_notified_when_request_is_approved_by_hr(): void
+    {
+        Notification::fake();
+
+        $manager = User::factory()->manager()->create();
+        $hr = User::factory()->hr()->create();
         $employee = User::factory()->create(['manager_id' => $manager->id]);
         $leaveType = LeaveType::factory()->create();
 
@@ -180,17 +209,17 @@ class LeaveRequestNotificationTest extends TestCase
             'used_days' => 0,
         ]);
 
-        $leaveRequest = LeaveRequest::factory()->create([
+        $leaveRequest = LeaveRequest::factory()->pendingHr()->create([
             'user_id' => $employee->id,
             'leave_type_id' => $leaveType->id,
+            'approver_id' => $manager->id,
             'start_date' => now()->addDays(3)->toDateString(),
             'end_date' => now()->addDays(4)->toDateString(),
             'total_days' => 2,
-            'status' => 'pending',
         ]);
 
         $service = $this->app->make(LeaveRequestService::class);
-        $service->approve($leaveRequest->id, $manager, 'Enjoy!');
+        $service->approveByHr($leaveRequest->id, $hr, 'Enjoy!');
 
         Notification::assertSentTo(
             $employee,
@@ -199,7 +228,7 @@ class LeaveRequestNotificationTest extends TestCase
         );
     }
 
-    public function test_employee_is_notified_when_request_is_rejected(): void
+    public function test_employee_is_notified_when_request_is_rejected_by_manager(): void
     {
         Notification::fake();
 
@@ -210,11 +239,36 @@ class LeaveRequestNotificationTest extends TestCase
         $leaveRequest = LeaveRequest::factory()->create([
             'user_id' => $employee->id,
             'leave_type_id' => $leaveType->id,
-            'status' => 'pending',
+            'status' => 'pending_manager',
         ]);
 
         $service = $this->app->make(LeaveRequestService::class);
         $service->reject($leaveRequest->id, $manager, 'Not enough coverage.');
+
+        Notification::assertSentTo(
+            $employee,
+            LeaveRequestStatusNotification::class,
+            fn ($notification) => $notification->toDatabase($employee)['status'] === LeaveRequestStatus::Rejected->value,
+        );
+    }
+
+    public function test_employee_is_notified_when_request_is_rejected_by_hr(): void
+    {
+        Notification::fake();
+
+        $manager = User::factory()->manager()->create();
+        $hr = User::factory()->hr()->create();
+        $employee = User::factory()->create(['manager_id' => $manager->id]);
+        $leaveType = LeaveType::factory()->create();
+
+        $leaveRequest = LeaveRequest::factory()->pendingHr()->create([
+            'user_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'approver_id' => $manager->id,
+        ]);
+
+        $service = $this->app->make(LeaveRequestService::class);
+        $service->reject($leaveRequest->id, $hr, 'Insufficient coverage.');
 
         Notification::assertSentTo(
             $employee,

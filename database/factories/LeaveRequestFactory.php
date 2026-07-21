@@ -31,11 +31,20 @@ class LeaveRequestFactory extends Factory
             'is_half_day' => false,
             'total_days' => $startDate->diff($endDate)->days + 1,
             'reason' => fake()->sentence(),
-            'status' => LeaveRequestStatus::Pending->value,
+            'status' => LeaveRequestStatus::PendingManager->value,
             'approver_id' => null,
+            'hr_approver_id' => null,
             'decision_note' => null,
             'decided_at' => null,
         ];
+    }
+
+    public function pendingHr(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => LeaveRequestStatus::PendingHR->value,
+            'approver_id' => User::factory(),
+        ]);
     }
 
     public function approved(): static
@@ -43,6 +52,7 @@ class LeaveRequestFactory extends Factory
         return $this->state(fn (array $attributes) => [
             'status' => LeaveRequestStatus::Approved->value,
             'approver_id' => User::factory(),
+            'hr_approver_id' => User::factory(),
             'decided_at' => now(),
         ]);
     }
