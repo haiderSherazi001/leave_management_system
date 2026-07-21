@@ -93,11 +93,19 @@ final class LeaveRequestService
             throw new DomainException("Requested {$totalDays} day(s) exceeds the remaining balance of {$remaining} day(s).");
         }
 
-        // Leadership (manager/HR) requests bypass the approval queue entirely: they're
-        // recorded as already-approved and their balance is deducted immediately, so
-        // attendance reporting reflects their leave without waiting on an approver who,
-        // for a manager or HR applying for their own leave, may not meaningfully exist.
-        $isLeadership = in_array($role, [UserRole::Manager->value, UserRole::Hr->value], true);
+        // A Manager applying for their own leave can't be the one who signs off on it
+        // — payroll compliance requires HR's final approval regardless of who's
+        // asking — so their request skips straight to PendingHR, exactly as if they'd
+        // manually forwarded it via approve(). HR has no one above them in the chain,
+        // so an HR user's own request is still auto-approved immediately.
+        $isManager = $role === UserRole::Manager->value;
+        $isHr = $role === UserRole::Hr->value;
+
+        $status = match (true) {
+            $isHr => LeaveRequestStatus::Approved,
+            $isManager => LeaveRequestStatus::PendingHR,
+            default => LeaveRequestStatus::PendingManager,
+        };
 
         $leaveRequestId = DB::table('leave_requests')->insertGetId([
             'user_id' => $userId,
@@ -107,16 +115,19 @@ final class LeaveRequestService
             'is_half_day' => $isHalfDay,
             'total_days' => $totalDays,
             'reason' => $reason,
-            'status' => $isLeadership ? LeaveRequestStatus::Approved->value : LeaveRequestStatus::PendingManager->value,
-            'approver_id' => $isLeadership ? $userId : null,
-            'decision_note' => $isLeadership ? 'Auto-approved' : null,
-            'decided_at' => $isLeadership ? now() : null,
+            'status' => $status->value,
+            'approver_id' => $isManager ? $userId : null,
+            'hr_approver_id' => $isHr ? $userId : null,
+            'decision_note' => $isHr ? 'Auto-approved' : null,
+            'decided_at' => $isHr ? now() : null,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
-        if ($isLeadership) {
-            $this->balances->deductDays($userId, $leaveTypeId, $year, $totalDays);
+        if ($isHr) {
+            $this->finalizeApproval(LeaveRequest::findOrFail($leaveRequestId));
+        } elseif ($isManager) {
+            $this->notifyHrOfPendingApproval(LeaveRequest::findOrFail($leaveRequestId), User::findOrFail($userId));
         } else {
             $this->notifyManagersOfNewRequest($leaveRequestId, $userId, $leaveTypeId, $startDate, $endDate, $totalDays, $reason);
         }
@@ -203,35 +214,46 @@ final class LeaveRequestService
             throw new DomainException('Only requests pending HR approval can be approved at this stage.');
         }
 
-        $year = $leaveRequest->start_date->year;
-        $remaining = $this->balances->remainingDays($leaveRequest->user_id, $leaveRequest->leave_type_id, $year);
+        $remaining = $this->balances->remainingDays($leaveRequest->user_id, $leaveRequest->leave_type_id, $leaveRequest->start_date->year);
 
         if ((float) $leaveRequest->total_days > $remaining) {
             throw new DomainException('Employee no longer has sufficient balance for this request.');
         }
 
-        DB::transaction(function () use ($leaveRequest, $hrApprover, $note, $year): void {
-            DB::table('leave_requests')
-                ->where('id', $leaveRequest->id)
-                ->update([
-                    'status' => LeaveRequestStatus::Approved->value,
-                    'hr_approver_id' => $hrApprover->id,
-                    'decision_note' => $note,
-                    'decided_at' => now(),
-                    'updated_at' => now(),
-                ]);
+        DB::table('leave_requests')
+            ->where('id', $leaveRequest->id)
+            ->update([
+                'status' => LeaveRequestStatus::Approved->value,
+                'hr_approver_id' => $hrApprover->id,
+                'decision_note' => $note,
+                'decided_at' => now(),
+                'updated_at' => now(),
+            ]);
 
+        $this->finalizeApproval($leaveRequest);
+        $this->notifyEmployeeOfDecision($leaveRequest, $hrApprover, $note, LeaveRequestStatus::Approved);
+    }
+
+    /**
+     * Deducts balance and links attendance for a request that has just
+     * become Approved — shared by approveByHr() (the normal path) and
+     * submit() (an HR user auto-approving their own leave, which has no
+     * HR stage to pass through since HR is already the top of the chain).
+     * Deduction and attendance-linking happen together in one transaction
+     * so a request is never left half-finalized.
+     */
+    private function finalizeApproval(LeaveRequest $leaveRequest): void
+    {
+        DB::transaction(function () use ($leaveRequest): void {
             $this->balances->deductDays(
                 $leaveRequest->user_id,
                 $leaveRequest->leave_type_id,
-                $year,
+                $leaveRequest->start_date->year,
                 (float) $leaveRequest->total_days,
             );
-        });
 
-        // Outside the transaction: neither of these must be able to roll back a real approval.
-        $this->linkApprovedLeaveToAttendance($leaveRequest);
-        $this->notifyEmployeeOfDecision($leaveRequest, $hrApprover, $note, LeaveRequestStatus::Approved);
+            $this->linkApprovedLeaveToAttendance($leaveRequest);
+        });
     }
 
     /**

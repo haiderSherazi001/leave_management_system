@@ -468,7 +468,14 @@ class LeaveRequestWorkflowTest extends TestCase
         );
     }
 
-    public function test_manager_submitting_a_leave_request_is_auto_approved_and_balance_deducted(): void
+    /**
+     * A Manager applying for their own leave can no longer approve
+     * themselves — payroll compliance requires HR's sign-off regardless of
+     * who's asking — so their own request skips straight to PendingHR,
+     * exactly as if they'd manually forwarded it via approve(). Balance is
+     * not touched until HR actually finalizes it.
+     */
+    public function test_manager_submitting_a_leave_request_skips_straight_to_pending_hr(): void
     {
         $manager = User::factory()->manager()->create();
         $leaveType = LeaveType::factory()->create();
@@ -494,8 +501,51 @@ class LeaveRequestWorkflowTest extends TestCase
 
         $this->assertDatabaseHas('leave_requests', [
             'id' => $leaveRequestId,
+            'status' => 'pending_hr',
+            'approver_id' => $manager->id,
+            'hr_approver_id' => null,
+            'decided_at' => null,
+        ]);
+
+        $this->assertDatabaseHas('leave_balances', [
+            'user_id' => $manager->id,
+            'leave_type_id' => $leaveType->id,
+            'used_days' => 0,
+        ]);
+    }
+
+    public function test_hr_can_finalize_a_manager_self_submitted_request(): void
+    {
+        $manager = User::factory()->manager()->create();
+        $hr = User::factory()->hr()->create();
+        $leaveType = LeaveType::factory()->create();
+
+        LeaveBalance::factory()->create([
+            'user_id' => $manager->id,
+            'leave_type_id' => $leaveType->id,
+            'year' => now()->year,
+            'allocated_days' => 10,
+            'used_days' => 0,
+        ]);
+
+        $service = $this->app->make(LeaveRequestService::class);
+
+        $leaveRequestId = $service->submit(
+            userId: $manager->id,
+            leaveTypeId: $leaveType->id,
+            startDate: today()->addDays(5)->toImmutable(),
+            endDate: today()->addDays(6)->toImmutable(),
+            isHalfDay: false,
+            reason: 'Manager leave',
+        );
+
+        $service->approveByHr($leaveRequestId, $hr);
+
+        $this->assertDatabaseHas('leave_requests', [
+            'id' => $leaveRequestId,
             'status' => 'approved',
             'approver_id' => $manager->id,
+            'hr_approver_id' => $hr->id,
         ]);
 
         $this->assertDatabaseHas('leave_balances', [
@@ -505,7 +555,14 @@ class LeaveRequestWorkflowTest extends TestCase
         ]);
     }
 
-    public function test_hr_submitting_a_leave_request_is_auto_approved_and_balance_deducted(): void
+    /**
+     * HR has no one above them in the approval chain, so their own request
+     * is still auto-approved immediately — but it must now also deduct
+     * balance and link attendance right away (previously the leadership
+     * bypass deducted balance but never linked attendance for either role,
+     * an existing gap this fix closes for the HR case).
+     */
+    public function test_hr_submitting_a_leave_request_is_auto_approved_with_balance_and_attendance(): void
     {
         $hr = User::factory()->hr()->create();
         $leaveType = LeaveType::factory()->create();
@@ -532,13 +589,20 @@ class LeaveRequestWorkflowTest extends TestCase
         $this->assertDatabaseHas('leave_requests', [
             'id' => $leaveRequestId,
             'status' => 'approved',
-            'approver_id' => $hr->id,
+            'approver_id' => null,
+            'hr_approver_id' => $hr->id,
         ]);
 
         $this->assertDatabaseHas('leave_balances', [
             'user_id' => $hr->id,
             'leave_type_id' => $leaveType->id,
             'used_days' => 1,
+        ]);
+
+        $this->assertDatabaseHas('attendances', [
+            'user_id' => $hr->id,
+            'date' => today()->addDays(5)->toDateString(),
+            'status' => 'on_leave',
         ]);
     }
 

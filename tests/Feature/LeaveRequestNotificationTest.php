@@ -277,12 +277,19 @@ class LeaveRequestNotificationTest extends TestCase
         );
     }
 
-    public function test_no_notification_is_sent_when_a_manager_submits_their_own_leave_request(): void
+    /**
+     * A Manager's own request skips the manager review stage entirely (they
+     * can't approve themselves), so their own manager is never notified —
+     * but it still lands at PendingHR, so HR is notified exactly as if the
+     * request had been manually forwarded.
+     */
+    public function test_hr_is_notified_and_the_managers_own_manager_is_not_when_a_manager_submits_their_own_leave_request(): void
     {
         Notification::fake();
 
         $topManager = User::factory()->manager()->create();
         $manager = User::factory()->manager()->create(['manager_id' => $topManager->id]);
+        $hr = User::factory()->hr()->create();
         $leaveType = LeaveType::factory()->create();
 
         LeaveBalance::factory()->create([
@@ -304,7 +311,8 @@ class LeaveRequestNotificationTest extends TestCase
             reason: 'Manager leave',
         );
 
-        Notification::assertNothingSent();
+        Notification::assertSentTo($hr, LeaveRequestAwaitingHrApprovalNotification::class);
+        Notification::assertNotSentTo($topManager, NewLeaveRequestNotification::class);
     }
 
     public function test_no_notification_is_sent_when_hr_submits_their_own_leave_request(): void
