@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AttendanceExportController;
+use App\Http\Controllers\Admin\AttendancePdfExportController;
 use App\Http\Controllers\ProfileController;
 use App\Livewire\Admin\Dashboard;
 use App\Livewire\Admin\Departments;
@@ -36,6 +37,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/admin/dashboard', Dashboard::class)->name('admin.dashboard');
     Route::get('/admin/attendance/export', AttendanceExportController::class)->name('admin.attendance.export');
+    Route::get('/admin/attendance/export-pdf', AttendancePdfExportController::class)->name('admin.attendance.export-pdf');
     Route::get('/admin/leave-approvals', LeaveApprovals::class)->name('admin.leave-approvals');
     Route::get('/admin/employees', Employees::class)->name('admin.employees');
     Route::get('/admin/departments', Departments::class)->name('admin.departments');

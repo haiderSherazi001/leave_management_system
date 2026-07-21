@@ -37,6 +37,7 @@
                 <x-text-input id="export-end" name="end" type="date" value="{{ now()->toDateString() }}" class="mt-1 block" />
             </div>
             <x-primary-button>Export to Excel</x-primary-button>
+            <x-secondary-button type="submit" formaction="{{ route('admin.attendance.export-pdf') }}">Export to PDF</x-secondary-button>
         </form>
     </x-card>
 </div>
