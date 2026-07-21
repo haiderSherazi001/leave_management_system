@@ -43,6 +43,7 @@ class Holidays extends Component
     {
         $this->reset(['editingId', 'date', 'name']);
         $this->showForm = true;
+        $this->dispatch('form-opened');
     }
 
     public function edit(int $holidayId): void
@@ -57,6 +58,7 @@ class Holidays extends Component
         $this->date = $holiday->date;
         $this->name = $holiday->name;
         $this->showForm = true;
+        $this->dispatch('form-opened');
     }
 
     public function cancel(): void

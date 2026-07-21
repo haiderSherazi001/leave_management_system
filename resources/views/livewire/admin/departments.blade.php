@@ -8,7 +8,7 @@
     </div>
 
     @if ($showForm)
-        <x-card>
+        <x-card data-autofocus-form>
             <h3 class="text-lg font-semibold text-slate-900 mb-4">
                 {{ $editingId === null ? 'Add Department' : 'Edit Department' }}
             </h3>

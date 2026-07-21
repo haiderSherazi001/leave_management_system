@@ -848,4 +848,42 @@ class AdminManagementTest extends TestCase
             ->assertSee('Active Manager')
             ->assertSee('Retired Manager (inactive)');
     }
+
+    /**
+     * The frontend listens for this event to scroll the (long-page-relative)
+     * form into view and focus its first field — without it, editing a row
+     * further down a long list leaves the form open off-screen above.
+     */
+    public function test_opening_the_employee_form_dispatches_a_focus_event(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $employee = User::factory()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)->call('startCreate')->assertDispatched('form-opened');
+        Livewire::test(Employees::class)->call('edit', $employee->id)->assertDispatched('form-opened');
+    }
+
+    public function test_opening_the_department_form_dispatches_a_focus_event(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $department = Department::factory()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(Departments::class)->call('startCreate')->assertDispatched('form-opened');
+        Livewire::test(Departments::class)->call('edit', $department->id)->assertDispatched('form-opened');
+    }
+
+    public function test_opening_the_leave_type_form_dispatches_a_focus_event(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $leaveType = LeaveType::factory()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(LeaveTypes::class)->call('startCreate')->assertDispatched('form-opened');
+        Livewire::test(LeaveTypes::class)->call('edit', $leaveType->id)->assertDispatched('form-opened');
+    }
 }

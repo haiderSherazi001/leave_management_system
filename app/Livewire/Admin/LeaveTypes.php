@@ -55,6 +55,7 @@ class LeaveTypes extends Component
     {
         $this->reset(['editingId', 'name', 'code', 'yearlyAllocationDays', 'carryForwardEnabled', 'carryForwardMaxDays', 'description']);
         $this->showForm = true;
+        $this->dispatch('form-opened');
     }
 
     public function edit(int $leaveTypeId): void
@@ -73,6 +74,7 @@ class LeaveTypes extends Component
         $this->carryForwardMaxDays = $leaveType->carry_forward_max_days;
         $this->description = $leaveType->description ?? '';
         $this->showForm = true;
+        $this->dispatch('form-opened');
     }
 
     public function cancel(): void

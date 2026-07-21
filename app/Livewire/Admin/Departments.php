@@ -62,6 +62,7 @@ class Departments extends Component
     {
         $this->reset(['editingId', 'name', 'managerId']);
         $this->showForm = true;
+        $this->dispatch('form-opened');
     }
 
     public function edit(int $departmentId): void
@@ -76,6 +77,7 @@ class Departments extends Component
         $this->name = $department->name;
         $this->managerId = $department->manager_id;
         $this->showForm = true;
+        $this->dispatch('form-opened');
     }
 
     public function cancel(): void

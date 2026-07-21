@@ -118,4 +118,20 @@ class WorkScheduleHolidayTest extends TestCase
             ->call('save')
             ->assertHasErrors('date');
     }
+
+    /**
+     * The frontend listens for this event to scroll the form into view and
+     * focus its first field — without it, editing a holiday further down a
+     * long list leaves the form open off-screen above.
+     */
+    public function test_opening_the_holiday_form_dispatches_a_focus_event(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $holiday = Holiday::factory()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(Holidays::class)->call('startCreate')->assertDispatched('form-opened');
+        Livewire::test(Holidays::class)->call('edit', $holiday->id)->assertDispatched('form-opened');
+    }
 }

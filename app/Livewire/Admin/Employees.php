@@ -136,6 +136,7 @@ class Employees extends Component
         $this->reset(['editingId', 'name', 'email', 'password', 'departmentId', 'managerId', 'joinedAt']);
         $this->role = UserRole::Employee->value;
         $this->showForm = true;
+        $this->dispatch('form-opened');
     }
 
     public function edit(int $userId): void
@@ -157,6 +158,7 @@ class Employees extends Component
         $this->managerId = $user->role === UserRole::Hr->value ? null : $user->manager_id;
         $this->joinedAt = $user->joined_at;
         $this->showForm = true;
+        $this->dispatch('form-opened');
     }
 
     /**
