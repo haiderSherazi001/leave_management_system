@@ -29,7 +29,7 @@ Build features in this exact order:
 1. **Phase 1: Core** (employees, leave types/balances, online leave requests, manager approval workflow).
 2. **Phase 2: Attendance** (daily attendance marking, auto-linked leave, holidays & late flags, team calendar).
 3. **Phase 3: Reporting** (automated scheduled HR reports, Excel/PDF exports, dashboards).
-4. **Phase 4: Scale** (multi-level approvals, WhatsApp/SMS alerts, biometric/geo check-in, payroll integration).
+4. **Phase 4: Scale** (multi-level approvals, biometric/geo check-in, payroll integration).
 
 ## Tech Stack
 - **Backend:** Laravel 11 (PHP 8.2).
