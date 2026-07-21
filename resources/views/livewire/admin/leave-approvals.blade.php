@@ -1,35 +1,33 @@
-<div class="py-12">
-    <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-    <h2 class="font-semibold text-xl text-gray-800 leading-tight">{{ __('HR Leave Approvals') }}</h2>
+<x-slot name="header">{{ __('HR Leave Approvals') }}</x-slot>
 
-    <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg p-6">
-        <h3 class="text-lg font-medium text-gray-900 mb-1">Awaiting Final Approval</h3>
-        <p class="text-sm text-gray-500 mb-4">Requests already approved by a manager, awaiting your final sign-off.</p>
+<x-card>
+    <h3 class="text-lg font-semibold text-slate-900 mb-1">Awaiting Final Approval</h3>
+    <p class="text-sm text-slate-500 mb-4">Requests already approved by a manager, awaiting your final sign-off.</p>
 
     @if ($errorMessage)
-        <div class="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700">
+        <div class="mb-4 rounded-lg bg-red-50 p-4 text-sm text-red-700">
             {{ $errorMessage }}
         </div>
     @endif
 
     @if (count($requests) === 0)
-        <p class="text-sm text-gray-500">No leave requests are awaiting HR approval.</p>
+        <p class="text-sm text-slate-500">No leave requests are awaiting HR approval.</p>
     @else
         <div class="space-y-4">
             @foreach ($requests as $request)
-                <div class="border border-gray-200 rounded-md p-4" wire:key="request-{{ $request->id }}">
+                <div class="border border-slate-200 rounded-lg p-4" wire:key="request-{{ $request->id }}">
                     <div class="flex justify-between items-start">
                         <div>
-                            <p class="font-medium text-gray-900">{{ $request->employee_name }}</p>
-                            <p class="text-sm text-gray-500">
+                            <p class="font-medium text-slate-900">{{ $request->employee_name }}</p>
+                            <p class="text-sm text-slate-500">
                                 {{ $request->leave_type_name }} &middot;
                                 {{ \Illuminate\Support\Carbon::parse($request->start_date)->format('M j, Y') }}
                                 &ndash;
                                 {{ \Illuminate\Support\Carbon::parse($request->end_date)->format('M j, Y') }}
                                 ({{ $request->total_days }} day{{ $request->total_days == 1 ? '' : 's' }})
                             </p>
-                            <p class="text-sm text-gray-600 mt-1">{{ $request->reason }}</p>
-                            <p class="text-xs text-gray-400 mt-1">
+                            <p class="text-sm text-slate-600 mt-1">{{ $request->reason }}</p>
+                            <p class="text-xs text-slate-400 mt-1">
                                 Approved by manager: {{ $request->manager_name ?? '—' }}
                                 @if ($request->manager_note)
                                     &middot; "{{ $request->manager_note }}"
@@ -39,32 +37,24 @@
                     </div>
 
                     <div class="mt-3">
-                        <input
+                        <x-text-input
                             type="text"
                             wire:model="notes.{{ $request->id }}"
                             placeholder="Optional note"
-                            class="block w-full text-sm border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm"
-                        >
+                            class="block w-full text-sm"
+                        />
                     </div>
 
                     <div class="mt-3 flex gap-2">
-                        <button
-                            wire:click="approve({{ $request->id }})"
-                            class="inline-flex items-center px-3 py-1.5 bg-green-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-green-500"
-                        >
+                        <x-primary-button wire:click="approve({{ $request->id }})" class="!bg-emerald-600 hover:!bg-emerald-500">
                             Approve
-                        </button>
-                        <button
-                            wire:click="reject({{ $request->id }})"
-                            class="inline-flex items-center px-3 py-1.5 bg-red-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-red-500"
-                        >
+                        </x-primary-button>
+                        <x-danger-button wire:click="reject({{ $request->id }})">
                             Reject
-                        </button>
+                        </x-danger-button>
                     </div>
                 </div>
             @endforeach
         </div>
     @endif
-    </div>
-    </div>
-</div>
+</x-card>
