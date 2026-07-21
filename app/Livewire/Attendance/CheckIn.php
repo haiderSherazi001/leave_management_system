@@ -9,6 +9,7 @@ use App\Services\HolidayService;
 use DomainException;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
@@ -17,14 +18,22 @@ class CheckIn extends Component
 {
     public ?string $errorMessage = null;
 
-    public function checkIn(AttendanceService $service): void
+    /**
+     * Coordinates are captured by the browser's Geolocation API and passed
+     * straight into this call from JS (see the view) — nothing is trusted
+     * from a hidden form field, and the actual radius check happens
+     * server-side in AttendanceService, never in the client.
+     */
+    public function checkIn(AttendanceService $service, float $latitude, float $longitude): void
     {
         $this->errorMessage = null;
 
         try {
-            $service->checkIn((int) Auth::id(), now()->toDateString());
+            $service->checkIn((int) Auth::id(), now()->toDateString(), $latitude, $longitude);
         } catch (DomainException $exception) {
             $this->errorMessage = $exception->getMessage();
+        } catch (ValidationException $exception) {
+            $this->errorMessage = $exception->validator->errors()->first();
         }
     }
 

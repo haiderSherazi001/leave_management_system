@@ -182,7 +182,7 @@ class AttendanceAutoLinkTest extends TestCase
         $service = $this->app->make(AttendanceService::class);
 
         $service->markOnLeave($employee->id, '2026-08-10');
-        $service->checkIn($employee->id, '2026-08-10');
+        $service->checkIn($employee->id, '2026-08-10', (float) config('attendance.office_latitude'), (float) config('attendance.office_longitude'));
 
         $record = DB::table('attendances')->where('user_id', $employee->id)->where('date', '2026-08-10')->first();
 

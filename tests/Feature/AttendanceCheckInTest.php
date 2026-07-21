@@ -26,6 +26,14 @@ class AttendanceCheckInTest extends TestCase
         parent::tearDown();
     }
 
+    /**
+     * @return array{0: float, 1: float}
+     */
+    private function officeCoordinates(): array
+    {
+        return [(float) config('attendance.office_latitude'), (float) config('attendance.office_longitude')];
+    }
+
     public function test_attendance_page_is_accessible_to_any_authenticated_role(): void
     {
         $employee = User::factory()->create();
@@ -69,7 +77,7 @@ class AttendanceCheckInTest extends TestCase
 
         $this->actingAs($employee);
 
-        Livewire::test(CheckIn::class)->call('checkIn');
+        Livewire::test(CheckIn::class)->call('checkIn', ...$this->officeCoordinates());
 
         $this->assertDatabaseHas('attendances', [
             'user_id' => $employee->id,
@@ -88,13 +96,29 @@ class AttendanceCheckInTest extends TestCase
 
         $this->actingAs($employee);
 
-        Livewire::test(CheckIn::class)->call('checkIn');
+        Livewire::test(CheckIn::class)->call('checkIn', ...$this->officeCoordinates());
 
         Livewire::test(CheckIn::class)
-            ->call('checkIn')
+            ->call('checkIn', ...$this->officeCoordinates())
             ->assertSet('errorMessage', 'You have already checked in today.');
 
         $this->assertDatabaseCount('attendances', 1);
+    }
+
+    public function test_employee_cannot_check_in_from_outside_the_office_radius(): void
+    {
+        $employee = User::factory()->create();
+
+        $this->actingAs($employee);
+
+        // Roughly 1km north of the office — well outside the default 100m radius.
+        [$officeLat, $officeLon] = $this->officeCoordinates();
+
+        Livewire::test(CheckIn::class)
+            ->call('checkIn', $officeLat + 0.009, $officeLon)
+            ->assertSet('errorMessage', 'You must be within 100 meters of the office to check in.');
+
+        $this->assertDatabaseCount('attendances', 0);
     }
 
     public function test_employee_can_check_out_after_checking_in(): void
@@ -103,7 +127,7 @@ class AttendanceCheckInTest extends TestCase
 
         $this->actingAs($employee);
 
-        Livewire::test(CheckIn::class)->call('checkIn');
+        Livewire::test(CheckIn::class)->call('checkIn', ...$this->officeCoordinates());
         Livewire::test(CheckIn::class)->call('checkOut');
 
         $record = Attendance::where('user_id', $employee->id)->firstOrFail();
@@ -129,7 +153,7 @@ class AttendanceCheckInTest extends TestCase
 
         $this->actingAs($employee);
 
-        Livewire::test(CheckIn::class)->call('checkIn');
+        Livewire::test(CheckIn::class)->call('checkIn', ...$this->officeCoordinates());
         Livewire::test(CheckIn::class)->call('checkOut');
 
         Livewire::test(CheckIn::class)
@@ -143,7 +167,7 @@ class AttendanceCheckInTest extends TestCase
         $employeeB = User::factory()->create();
 
         $service = $this->app->make(AttendanceService::class);
-        $service->checkIn($employeeA->id, now()->toDateString());
+        $service->checkIn($employeeA->id, now()->toDateString(), ...$this->officeCoordinates());
 
         $this->assertNotNull($service->findForDate($employeeA->id, now()->toDateString()));
         $this->assertNull($service->findForDate($employeeB->id, now()->toDateString()));
@@ -163,7 +187,7 @@ class AttendanceCheckInTest extends TestCase
         Carbon::setTestNow(Carbon::parse('2026-08-10 08:55:00'));
 
         $service = $this->app->make(AttendanceService::class);
-        $service->checkIn($employee->id, '2026-08-10');
+        $service->checkIn($employee->id, '2026-08-10', ...$this->officeCoordinates());
 
         $this->assertDatabaseHas('attendances', ['user_id' => $employee->id, 'status' => 'present']);
     }
@@ -176,7 +200,7 @@ class AttendanceCheckInTest extends TestCase
         Carbon::setTestNow(Carbon::parse('2026-08-10 09:09:00'));
 
         $service = $this->app->make(AttendanceService::class);
-        $service->checkIn($employee->id, '2026-08-10');
+        $service->checkIn($employee->id, '2026-08-10', ...$this->officeCoordinates());
 
         $this->assertDatabaseHas('attendances', ['user_id' => $employee->id, 'status' => 'present']);
     }
@@ -189,7 +213,7 @@ class AttendanceCheckInTest extends TestCase
         Carbon::setTestNow(Carbon::parse('2026-08-10 09:15:00'));
 
         $service = $this->app->make(AttendanceService::class);
-        $service->checkIn($employee->id, '2026-08-10');
+        $service->checkIn($employee->id, '2026-08-10', ...$this->officeCoordinates());
 
         $this->assertDatabaseHas('attendances', ['user_id' => $employee->id, 'status' => 'late']);
     }
@@ -199,7 +223,7 @@ class AttendanceCheckInTest extends TestCase
         $employee = User::factory()->create();
 
         $service = $this->app->make(AttendanceService::class);
-        $service->checkIn($employee->id, now()->toDateString());
+        $service->checkIn($employee->id, now()->toDateString(), ...$this->officeCoordinates());
 
         $this->assertDatabaseHas('attendances', ['user_id' => $employee->id, 'status' => 'present']);
     }

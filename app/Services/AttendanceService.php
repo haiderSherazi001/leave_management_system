@@ -8,19 +8,36 @@ use App\Enums\AttendanceStatus;
 use Carbon\CarbonImmutable;
 use DomainException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 final class AttendanceService
 {
     public function __construct(
         private readonly WorkScheduleService $schedule,
+        private readonly GeoLocationService $geoLocation,
     ) {}
 
-    public function checkIn(int $userId, string $date): void
+    /**
+     * Requires the employee's current coordinates so check-in can be
+     * restricted to the office premises (a zero-budget "geofence" — no paid
+     * geolocation API, just the browser's own HTML5 Geolocation plus a
+     * Haversine distance check against the configured office location).
+     */
+    public function checkIn(int $userId, string $date, float $latitude, float $longitude): void
     {
         $existing = DB::table('attendances')->where('user_id', $userId)->where('date', $date)->first();
 
         if ($existing !== null && $existing->check_in_at !== null) {
             throw new DomainException('You have already checked in today.');
+        }
+
+        if (! $this->geoLocation->isWithinOfficeRadius($latitude, $longitude)) {
+            throw ValidationException::withMessages([
+                'location' => sprintf(
+                    'You must be within %d meters of the office to check in.',
+                    config('attendance.max_checkin_distance_meters'),
+                ),
+            ]);
         }
 
         $checkInAt = CarbonImmutable::now();

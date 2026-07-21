@@ -37,13 +37,45 @@
                     </div>
                 </div>
             @else
-                <div class="mt-6 flex gap-2">
-                    <x-primary-button wire:click="checkIn" :disabled="(bool) $today?->check_in_at">
-                        Check In
-                    </x-primary-button>
-                    <x-secondary-button wire:click="checkOut" :disabled="! $today?->check_in_at || (bool) $today?->check_out_at">
-                        Check Out
-                    </x-secondary-button>
+                <div
+                    x-data="{
+                        capturing: false,
+                        locationError: null,
+                        checkIn() {
+                            this.locationError = null;
+
+                            if (! ('geolocation' in navigator)) {
+                                this.locationError = 'Your browser does not support location services. Location access is required to check in.';
+                                return;
+                            }
+
+                            this.capturing = true;
+
+                            navigator.geolocation.getCurrentPosition(
+                                (position) => {
+                                    this.capturing = false;
+                                    $wire.checkIn(position.coords.latitude, position.coords.longitude);
+                                },
+                                () => {
+                                    this.capturing = false;
+                                    this.locationError = 'Location access was denied. Please allow location access in your browser settings and try again.';
+                                },
+                                { enableHighAccuracy: true, timeout: 10000 }
+                            );
+                        },
+                    }"
+                >
+                    <div class="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700" x-show="locationError" x-text="locationError" style="display: none;"></div>
+
+                    <div class="flex gap-2">
+                        <x-primary-button type="button" @click="checkIn" x-bind:disabled="capturing || {{ $today?->check_in_at ? 'true' : 'false' }}">
+                            <span x-show="! capturing">Check In</span>
+                            <span x-show="capturing" style="display: none;">Getting your location&hellip;</span>
+                        </x-primary-button>
+                        <x-secondary-button wire:click="checkOut" :disabled="! $today?->check_in_at || (bool) $today?->check_out_at">
+                            Check Out
+                        </x-secondary-button>
+                    </div>
                 </div>
             @endif
         </div>
