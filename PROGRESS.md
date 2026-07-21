@@ -506,3 +506,157 @@ Final Phase 3 feature: HR now automatically receives an emailed attendance repor
 ### Plan for next session
 
 Phase 3 done. Next per `CLAUDE.md`'s phase order is **Phase 4: Scale** (multi-level approvals, WhatsApp/SMS alerts, biometric/geo check-in, payroll integration) — not started, no work done toward it yet.
+
+## 2026-07-21 — Phase 4 kickoff: multi-level leave approvals (branch: `feature/multi-level-approvals`)
+
+### Work done
+
+First Phase 4 feature: leave requests now route Employee → Manager → HR → Final instead of a single manager decision. `LeaveRequestStatus` gained `PendingManager`/`PendingHR` (replacing the old single `Pending`, migration backfills existing `pending` rows to `pending_manager`); `leave_requests` gained a nullable `hr_approver_id` alongside the existing `approver_id`.
+
+- `LeaveRequestService::approve()` now only forwards `PendingManager -> PendingHR` (no balance deduction, no attendance link — that's deferred to final approval); new `approveByHr()` does the real `PendingHR -> Approved` finalization; `reject()` works from either stage and records the rejecting approver in whichever column matches that stage.
+- `LeaveRequestPolicy` became stage-aware: the assigned manager decides `PendingManager`, any HR user decides `PendingHR` — same `approve`/`reject` Gate abilities, routed by the request's current status rather than by role alone.
+- New `LeaveRequestAwaitingHrApprovalNotification` (mail + database) sent to every active HR user once a manager forwards a request; new `App\Livewire\Admin\LeaveApprovals` company-wide HR inbox at `/admin/leave-approvals`.
+- `DashboardService`'s "Pending Requests" KPI now counts both stages.
+
+### Verification
+
+- Full suite: 156/156 passing (new tests cover both approval stages, cross-stage authorization denial, the HR inbox, and rejection at either stage).
+- Real MySQL: walked a request through both stages via `tinker` inside a rolled-back transaction — confirmed `pending_manager -> pending_hr -> approved`, balance/attendance untouched until the HR step.
+- `feature/multi-level-approvals` merged into `main`.
+
+## 2026-07-21 — Bug fix: manager self-approved leave bypassed HR (branch: `fix/manager-leave-routing`)
+
+### Bug found and fixed
+
+Reported directly: a Manager applying for their own leave was still auto-approved outright (the original Phase 1 "leadership bypass" behavior), letting them sign off on their own request without HR ever seeing it — a payroll-compliance gap introduced by the new multi-level workflow, not present before it existed.
+
+Fixed by routing `submit()`'s leadership branch by role instead of treating Manager and HR identically: a Manager's own request now skips straight to `PendingHR` (as if they'd manually forwarded it, HR notified the same way); an HR user's own request is still auto-approved immediately, since there's no one above HR in the chain. Extracted the shared "deduct balance + link attendance" logic out of `approveByHr()` into a private `finalizeApproval()` so `submit()`'s HR-auto-approve path could reuse it too — this incidentally fixed a second, pre-existing gap where HR's auto-approved leave never linked into attendance at all.
+
+### Verification
+
+- Full suite: 160/160 passing.
+- Real MySQL: confirmed via `tinker` that a Manager's self-submitted request lands at `pending_hr` with balance untouched, and that HR finalizing it afterward correctly deducts balance and links attendance.
+- `fix/manager-leave-routing` merged into `main`.
+
+## 2026-07-21 — GPS geofenced check-ins (branch: `feature/location-checkins`)
+
+### Work done
+
+Zero-budget "biometric/geo check-in" (Phase 4): employees must be within a configured radius of the office to check in, using the browser's HTML5 Geolocation API plus a Haversine distance check server-side — no paid geolocation service.
+
+- `OFFICE_LATITUDE` / `OFFICE_LONGITUDE` / `MAX_CHECKIN_DISTANCE_METERS` added to `.env.example`, read via new `config/attendance.php` (defaults match the placeholders, so the app works even before a real office location is set locally).
+- New `App\Services\GeoLocationService`: `calculateDistanceInMeters()` (Haversine) and `isWithinOfficeRadius()`.
+- `AttendanceService::checkIn()` now requires `$latitude`/`$longitude` and throws a `ValidationException` when outside the configured radius; `CheckIn` Livewire's `checkIn()` method takes coordinates as direct call arguments from JS (`$wire.checkIn(lat, lon)`), not hidden form fields or Livewire properties.
+- Real office coordinates were later set directly in `config/attendance.php`'s defaults (`bc93be2`) once the user had them.
+
+### Bug found and fixed — twice, then a third time for the real cause
+
+Manual browser testing hit `Uncaught ReferenceError: $wire is not defined` inside the geolocation success callback, three rounds running:
+1. First attempt: assumed `$wire` just needed capturing via `this.$wire` inside an `x-data` method before the async call — still failed, `this.$wire` itself was `undefined`.
+2. Second attempt: moved the whole geolocation call inline into the button's `@click` attribute (where Alpine reliably injects magics) and captured `$wire` into a local there — still the exact same error, even inside `@click` itself.
+3. **The real cause**: `resources/js/app.js` still had Breeze's original `import Alpine from 'alpinejs'; window.Alpine = Alpine; Alpine.start();`. Livewire 3 bundles and auto-starts its *own* Alpine (with `$wire` and its other magics registered) on every page — running a second, plugin-less Alpine instance alongside it meant whichever instance actually processed a given element determined whether `$wire` existed there, independent of how the click handler was written. Removed the manual Alpine bootstrap entirely; Livewire's own instance is now the only one running site-wide. This is Livewire's own documented migration note for Breeze projects, and explains why the first two "fixes" changed nothing.
+
+### Verification
+
+- Full suite: 160/160 passing (`GeoLocationServiceTest` covers exact-office/50m/1km cases via a pure-latitude-offset trick, exact under Haversine).
+- Real MySQL: confirmed a far-away coordinate is rejected and an at-office coordinate succeeds, via `tinker` in a rolled-back transaction.
+- `npm run build` succeeds and the bundle shrank slightly once Alpine wasn't duplicated.
+- `feature/location-checkins` merged into `main`.
+
+## 2026-07-21 — Mail delivery wired to Mailpit, APP_URL fixed (branch: `main`, local `.env` only)
+
+Two local environment fixes, no code changes: `MAIL_MAILER` pointed at a locally-running Mailpit (`smtp`, port `1025`) instead of `log`, so notification/report emails actually land somewhere visible instead of only appearing in `storage/logs/laravel.log`; `APP_URL` changed from the default `http://localhost` to `http://127.0.0.1:8000` so every `route()`-built link inside emails (the "Review Request" action buttons, etc.) resolves correctly. Verified by sending real mail through the app and confirming both the recipient and the link in Mailpit's actual rendered output.
+
+## 2026-07-21 — Payroll API via Sanctum, Phase 4 complete (branch: `feature/payroll-api`)
+
+### Work done
+
+Final Phase 4 item: external accounting/payroll software can now pull consolidated attendance/leave data as JSON via `GET /api/v1/payroll/summary`, gated behind Sanctum Bearer tokens.
+
+- `laravel/sanctum` installed (`install:api`), `HasApiTokens` added to `User`.
+- New `payroll:generate-token {email?}` artisan command issues a named token to an active HR/Admin user (defaults to the first one found).
+- `AttendanceExportService::summaryBetween()` — per-employee days-present / days-absent-or-late / approved-leave-days, built by grouping `rowsBetween()`'s existing synthesized rows rather than re-querying, so the numbers stay consistent with the HR Excel export and dashboard.
+- `Api\PayrollController::summary()` validates `start_date`/`end_date` and returns the aggregation as JSON.
+- `bootstrap/app.php` forces JSON error responses for any `/api/*` request regardless of `Accept` header, so an unauthenticated call gets a clean `401` JSON body instead of a `302` redirect to `/login` (every `/api/*` consumer here is a machine client, never a browser).
+
+### Verification
+
+- `tests/Feature/Api/PayrollApiTest.php` added; full suite passing.
+- `feature/payroll-api` merged into `main`.
+
+**Phase 4 (Scale) is now functionally complete**: multi-level approvals, GPS geofenced check-in, and the payroll API are all live. WhatsApp/SMS alerts were subsequently dropped from scope entirely (see below), so nothing remains outstanding against `CLAUDE.md`'s (current) Phase 4 description.
+
+## 2026-07-21 — Docs: WhatsApp/SMS alerts dropped from Phase 4 scope (branch: `main`)
+
+Product decision — nothing had been built toward it. `CLAUDE.md`'s Phase 4 line updated from "multi-level approvals, WhatsApp/SMS alerts, biometric/geo check-in, payroll integration" to "multi-level approvals, biometric/geo check-in, payroll integration".
+
+## 2026-07-21 — Full frontend redesign: sidebar layout, teal/emerald theme (branch: `feature/frontend-redesign`)
+
+### Work done
+
+Every screen now shares one consistent, role-aware shell instead of the Breeze default top-nav: a fixed left sidebar (dark, teal-accented) with nav sections that expand per role (core links for everyone, Approvals/Team Calendar for Managers, the full admin section for HR), a top bar with page title + user menu, and a teal/emerald brand replacing the default indigo throughout.
+
+- New `layouts/app.blade.php` + `layouts/navigation.blade.php` shell; new `x-badge`/`x-card` components; restyled buttons, inputs, dropdown.
+- Every Livewire view moved its heading into a `<x-slot name="header">` (confirmed this works correctly with Livewire's `#[Layout]` attribute) and picked up the new card/table/badge styling.
+- Guest layout (login, password reset, etc.) reskinned to match; generic employee/manager dashboard replaced with a real welcome + quick-links view (no new backend).
+- `APP_NAME` defaulted to `LeaveDesk` instead of `Laravel` in `.env.example`.
+
+Purely visual — no controller, service, or route behavior changed.
+
+### Verification
+
+- 165/165 tests passing unmodified.
+- Verified over real HTTP as HR, Manager, and Employee that pages render and the sidebar correctly scopes links per role.
+- `feature/frontend-redesign` merged into `main`.
+
+## 2026-07-21 — Bug fix: confusing HR email when a Manager applies for their own leave (branch: `fix/manager-self-leave-hr-email-wording`)
+
+### Bug found and fixed
+
+Reported after checking real email output via Mailpit: when a Manager applies for their own leave (auto-forwarded straight to `PendingHR`, since they can't approve themselves), the HR notification email read *"X has approved X's leave request"* — the same name twice, since there's no separate approver in that case. Technically accurate data, but reads like a copy-paste bug.
+
+`LeaveRequestAwaitingHrApprovalNotification` gained an `isSelfSubmitted` flag (computed in `LeaveRequestService::notifyHrOfPendingApproval()` by comparing the request's owner against the forwarding "manager") and uses distinct wording for that case: *"X (a Manager) has submitted their own Annual leave request. It needs your final sign-off since managers can't approve their own leave."*
+
+### Verification
+
+- Full suite: 166/166 passing (new test locks in both wordings by calling `toMail()` directly and inspecting the rendered lines).
+- Real Mailpit: re-triggered a manager self-submission and confirmed the actual email body reads correctly.
+- `fix/manager-self-leave-hr-email-wording` merged into `main`.
+
+## 2026-07-21 — UX: scroll to and focus the edit form on every admin CRUD screen (branch: `feature/edit-form-autofocus`)
+
+### Work done
+
+Reported directly: clicking Edit on a row far down a long list (Holidays, Departments, Employees, Leave Types) left the form open above, off-screen, with no indication anything happened.
+
+Each of the four components' `startCreate()`/`edit()` methods now dispatches a shared `form-opened` Livewire event; one listener in `resources/js/app.js` (not duplicated four times) scrolls the form — marked with `data-autofocus-form` on its `<x-card>` — into view and focuses its first field.
+
+A follow-up question from the user about whether Livewire itself was making the UI feel slow led to a useful clarification (recorded here since it may come up again): `edit()` already required a backend round-trip before this change (it has to fetch the real record to populate the form), so this feature added no new network latency — it just rides along on the response that already existed. `startCreate()` genuinely doesn't need any backend data and could be made a pure Alpine-only toggle with zero round-trip, but the user chose to leave that as is for now.
+
+### Verification
+
+- Full suite: 170/170 passing (4 new tests confirm the event fires from both `edit()` and `startCreate()` on all four components).
+- `npm run build` succeeds.
+- Not verified in an actual browser (no browser-automation tool available) — user asked to leave it as is rather than push further verification.
+- `feature/edit-form-autofocus` merged into `main`.
+
+## 2026-07-21 — PDF attendance export, closes the Phase 3 Excel/PDF gap (branch: `feature/attendance-pdf-export`)
+
+### Work done
+
+`CLAUDE.md`'s Phase 3 line always said "Excel/**PDF** exports," but only Excel had ever been built — surfaced during a status check, not previously reported as missing.
+
+- `barryvdh/laravel-dompdf` installed.
+- New `resources/views/pdf/attendance-report.blade.php` — plain HTML with inline `<style>` (not Tailwind classes, same reasoning as the monthly report email view: PDF/email rendering engines don't reliably support external stylesheets/utility classes).
+- New `App\Http\Controllers\Admin\AttendancePdfExportController`, reusing the exact same `AttendanceExportService::rowsBetween()` data source as the Excel export and the payroll API, so all three stay numerically consistent.
+- Dashboard gained a second "Export to PDF" button next to "Export to Excel," same date-range inputs, using a single `formaction` override on the second submit button rather than a duplicate form.
+
+### Verification
+
+- 3 new tests in `AttendancePdfExportTest` — no `Pdf::fake()` exists for this package, so these hit the real DomPDF renderer and check the actual response (status, `Content-Type`/`Content-Disposition` headers, and the `%PDF-` file-signature magic bytes). Full suite: 173/173 passing.
+- Real dev data: generated a PDF directly against the live database via `tinker` (165 real rows, genuine 14KB file, correct magic bytes) and visually reviewed the rendered output — correct headers, columns, and per-page header repetition across 5 pages.
+- `feature/attendance-pdf-export` merged into `main`.
+
+### Plan for next session
+
+All four phases in `CLAUDE.md` are now functionally complete. No specific next feature has been requested yet — worth checking with the user before starting anything new.
