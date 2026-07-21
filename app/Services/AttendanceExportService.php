@@ -28,7 +28,7 @@ final class AttendanceExportService
      * calculation in this app (calculateTotalDays(), the attendance
      * auto-link) already treats "a day of work".
      *
-     * @return Collection<int, array{name: string, date: string, check_in: ?string, check_out: ?string, status: string}>
+     * @return Collection<int, array{user_id: int, name: string, date: string, check_in: ?string, check_out: ?string, status: string}>
      */
     public function rowsBetween(string $start, string $end): Collection
     {
@@ -63,7 +63,7 @@ final class AttendanceExportService
     /**
      * @param  Collection<string, Attendance>  $attendanceByKey
      * @param  Collection<string, int>  $leaveDateKeys
-     * @return array{name: string, date: string, check_in: ?string, check_out: ?string, status: string}
+     * @return array{user_id: int, name: string, date: string, check_in: ?string, check_out: ?string, status: string}
      */
     private function rowFor(User $user, string $date, Collection $attendanceByKey, Collection $leaveDateKeys): array
     {
@@ -72,6 +72,7 @@ final class AttendanceExportService
 
         if ($attendance !== null) {
             return [
+                'user_id' => $user->id,
                 'name' => $user->name,
                 'date' => $date,
                 'check_in' => $attendance->check_in_at?->format('g:i A'),
@@ -81,12 +82,44 @@ final class AttendanceExportService
         }
 
         return [
+            'user_id' => $user->id,
             'name' => $user->name,
             'date' => $date,
             'check_in' => null,
             'check_out' => null,
             'status' => $leaveDateKeys->has($key) ? AttendanceStatus::OnLeave->label() : AttendanceStatus::Absent->label(),
         ];
+    }
+
+    /**
+     * Per-employee attendance/leave totals for [$start, $end] — the read
+     * model behind the payroll API. Built on top of rowsBetween() (grouped
+     * and counted, not re-queried) so "present", "absent", "late", and "on
+     * leave" mean exactly the same thing here as they do in the Excel
+     * export: synthesized per working day, not a raw count of stored
+     * attendance rows (this app never writes an `absent` row at all).
+     *
+     * @return Collection<int, array{user_id: int, name: string, days_present: int, days_absent_or_late: int, approved_leave_days: int}>
+     */
+    public function summaryBetween(string $start, string $end): Collection
+    {
+        return $this->rowsBetween($start, $end)
+            ->groupBy('user_id')
+            ->map(function (Collection $rows) {
+                $first = $rows->first();
+
+                return [
+                    'user_id' => $first['user_id'],
+                    'name' => $first['name'],
+                    'days_present' => $rows->where('status', AttendanceStatus::Present->label())->count(),
+                    'days_absent_or_late' => $rows->whereIn('status', [
+                        AttendanceStatus::Absent->label(),
+                        AttendanceStatus::Late->label(),
+                    ])->count(),
+                    'approved_leave_days' => $rows->where('status', AttendanceStatus::OnLeave->label())->count(),
+                ];
+            })
+            ->values();
     }
 
     /**
