@@ -37,46 +37,44 @@
                     </div>
                 </div>
             @else
-                <div
-                    x-data="{
-                        capturing: false,
-                        locationError: null,
-                        checkIn() {
-                            this.locationError = null;
-
-                            if (! ('geolocation' in navigator)) {
-                                this.locationError = 'Your browser does not support location services. Location access is required to check in.';
-                                return;
-                            }
-
-                            this.capturing = true;
-
-                            // Alpine's bare `$wire` magic only resolves inside expressions
-                            // Alpine itself evaluates (e.g. x-on attributes) — it's not
-                            // reliably in scope inside a native browser API callback like
-                            // getCurrentPosition's. Capturing `this.$wire` (which IS always
-                            // reachable via `this`) into a local before the async call
-                            // sidesteps that entirely.
-                            const $wire = this.$wire;
-
-                            navigator.geolocation.getCurrentPosition(
-                                (position) => {
-                                    this.capturing = false;
-                                    $wire.checkIn(position.coords.latitude, position.coords.longitude);
-                                },
-                                () => {
-                                    this.capturing = false;
-                                    this.locationError = 'Location access was denied. Please allow location access in your browser settings and try again.';
-                                },
-                                { enableHighAccuracy: true, timeout: 10000 }
-                            );
-                        },
-                    }"
-                >
+                <div x-data="{ capturing: false, locationError: null }">
                     <div class="mb-4 rounded-md bg-red-50 p-4 text-sm text-red-700" x-show="locationError" x-text="locationError" style="display: none;"></div>
 
                     <div class="flex gap-2">
-                        <x-primary-button type="button" @click="checkIn" x-bind:disabled="capturing || {{ $today?->check_in_at ? 'true' : 'false' }}">
+                        {{-- The geolocation call lives directly in @click (not a method
+                             defined inside x-data) because Alpine only reliably injects
+                             the bare $wire magic into expressions it evaluates itself —
+                             like this one. Capturing it into a local (`livewire`) before
+                             the async getCurrentPosition call means the callbacks close
+                             over that local instead of needing $wire in scope later. --}}
+                        <x-primary-button
+                            type="button"
+                            x-bind:disabled="capturing || {{ $today?->check_in_at ? 'true' : 'false' }}"
+                            @click="
+                                locationError = null;
+
+                                if (! ('geolocation' in navigator)) {
+                                    locationError = 'Your browser does not support location services. Location access is required to check in.';
+                                    return;
+                                }
+
+                                capturing = true;
+
+                                let livewire = $wire;
+
+                                navigator.geolocation.getCurrentPosition(
+                                    (position) => {
+                                        capturing = false;
+                                        livewire.checkIn(position.coords.latitude, position.coords.longitude);
+                                    },
+                                    () => {
+                                        capturing = false;
+                                        locationError = 'Location access was denied. Please allow location access in your browser settings and try again.';
+                                    },
+                                    { enableHighAccuracy: true, timeout: 10000 }
+                                );
+                            "
+                        >
                             <span x-show="! capturing">Check In</span>
                             <span x-show="capturing" style="display: none;">Getting your location&hellip;</span>
                         </x-primary-button>
