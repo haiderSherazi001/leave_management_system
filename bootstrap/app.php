@@ -27,4 +27,15 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(function (Request $request, Throwable $e) {
             return $request->is('api/*') || $request->expectsJson();
         });
+
+        // Every service in this app signals a business-rule conflict (already
+        // checked in, insufficient balance, overlapping request, etc.) by
+        // throwing DomainException. Mapping it here once means every API
+        // controller can call a service directly and get a clean JSON error
+        // automatically, instead of repeating a try/catch in every method.
+        $exceptions->render(function (DomainException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json(['message' => $e->getMessage()], 409);
+            }
+        });
     })->create();

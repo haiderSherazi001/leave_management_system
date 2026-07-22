@@ -23,6 +23,22 @@ final class LeaveTypeService
             ->all();
     }
 
+    /**
+     * Active leave types only — the exact query the web apply-for-leave
+     * form (RequestForm) already inlines for its dropdown, promoted to a
+     * service method now that the mobile API needs the same list.
+     *
+     * @return array<int, object>
+     */
+    public function activeList(): array
+    {
+        return DB::table('leave_types')
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get()
+            ->all();
+    }
+
     public function create(
         string $name,
         string $code,
