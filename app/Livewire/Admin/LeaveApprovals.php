@@ -11,18 +11,29 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
+use Livewire\WithPagination;
 
 #[Layout('layouts.app')]
 class LeaveApprovals extends Component
 {
+    use WithPagination;
+
     /** @var array<int, string> */
     public array $notes = [];
 
     public ?string $errorMessage = null;
 
+    public string $tab = 'pending';
+
     public function mount(): void
     {
         abort_unless(Auth::user()->isHr(), 403);
+    }
+
+    public function setTab(string $tab): void
+    {
+        $this->tab = $tab === 'history' ? 'history' : 'pending';
+        $this->resetPage();
     }
 
     public function approve(int $leaveRequestId, LeaveRequestService $service): void
@@ -59,7 +70,8 @@ class LeaveApprovals extends Component
     public function render(LeaveRequestService $service): View
     {
         return view('livewire.admin.leave-approvals', [
-            'requests' => $service->pendingForHr(),
+            'requests' => $this->tab === 'pending' ? $service->pendingForHr() : [],
+            'history' => $this->tab === 'history' ? $service->historyForHr() : null,
         ]);
     }
 }

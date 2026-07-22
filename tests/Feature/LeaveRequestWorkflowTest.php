@@ -754,4 +754,263 @@ class LeaveRequestWorkflowTest extends TestCase
 
         $service->approveByHr($leaveRequest->id, $hr);
     }
+
+    public function test_manager_history_shows_only_their_own_teams_decided_requests(): void
+    {
+        $managerA = User::factory()->manager()->create();
+        $managerB = User::factory()->manager()->create();
+        $leaveType = LeaveType::factory()->create();
+
+        $employeeUnderA = User::factory()->create(['name' => 'Under Manager A', 'manager_id' => $managerA->id]);
+        $employeeUnderB = User::factory()->create(['name' => 'Under Manager B', 'manager_id' => $managerB->id]);
+
+        LeaveRequest::factory()->approved()->create([
+            'user_id' => $employeeUnderA->id,
+            'leave_type_id' => $leaveType->id,
+            'approver_id' => $managerA->id,
+        ]);
+
+        LeaveRequest::factory()->rejected()->create([
+            'user_id' => $employeeUnderB->id,
+            'leave_type_id' => $leaveType->id,
+            'approver_id' => $managerB->id,
+        ]);
+
+        $this->actingAs($managerA);
+
+        Livewire::test(ApprovalQueue::class)
+            ->call('setTab', 'history')
+            ->assertSee('Under Manager A')
+            ->assertDontSee('Under Manager B');
+    }
+
+    /**
+     * approver_id never changes once the manager acts, regardless of what
+     * HR later decides — so a manager's history must include the eventual
+     * outcome of requests they forwarded, not just ones they personally
+     * rejected.
+     */
+    public function test_manager_history_includes_requests_forwarded_to_hr_regardless_of_who_finalized(): void
+    {
+        $manager = User::factory()->manager()->create();
+        $hr = User::factory()->hr()->create(['name' => 'Finalizing HR']);
+        $employee = User::factory()->create(['name' => 'Forwarded Employee']);
+        $leaveType = LeaveType::factory()->create();
+
+        LeaveRequest::factory()->create([
+            'user_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'status' => 'approved',
+            'approver_id' => $manager->id,
+            'hr_approver_id' => $hr->id,
+            'decided_at' => now(),
+        ]);
+
+        $this->actingAs($manager);
+
+        Livewire::test(ApprovalQueue::class)
+            ->call('setTab', 'history')
+            ->assertSee('Forwarded Employee')
+            ->assertSee('Finalizing HR');
+    }
+
+    public function test_hr_history_is_company_wide_regardless_of_which_hr_user_finalized(): void
+    {
+        $hrA = User::factory()->hr()->create();
+        $hrB = User::factory()->hr()->create();
+        $hrViewing = User::factory()->hr()->create();
+        $leaveType = LeaveType::factory()->create();
+
+        $employeeA = User::factory()->create(['name' => 'Finalized By A']);
+        $employeeB = User::factory()->create(['name' => 'Finalized By B']);
+
+        LeaveRequest::factory()->create([
+            'user_id' => $employeeA->id,
+            'leave_type_id' => $leaveType->id,
+            'status' => 'approved',
+            'hr_approver_id' => $hrA->id,
+            'decided_at' => now(),
+        ]);
+
+        LeaveRequest::factory()->create([
+            'user_id' => $employeeB->id,
+            'leave_type_id' => $leaveType->id,
+            'status' => 'rejected',
+            'hr_approver_id' => $hrB->id,
+            'decided_at' => now(),
+        ]);
+
+        $this->actingAs($hrViewing);
+
+        Livewire::test(LeaveApprovals::class)
+            ->call('setTab', 'history')
+            ->assertSee('Finalized By A')
+            ->assertSee('Finalized By B');
+    }
+
+    public function test_pending_tab_is_unchanged_by_the_new_history_tab(): void
+    {
+        $manager = User::factory()->manager()->create();
+        $leaveType = LeaveType::factory()->create();
+
+        $pendingEmployee = User::factory()->create(['name' => 'Still Pending', 'manager_id' => $manager->id]);
+        $decidedEmployee = User::factory()->create(['name' => 'Already Decided']);
+
+        LeaveRequest::factory()->create([
+            'user_id' => $pendingEmployee->id,
+            'leave_type_id' => $leaveType->id,
+            'status' => 'pending_manager',
+        ]);
+
+        LeaveRequest::factory()->approved()->create([
+            'user_id' => $decidedEmployee->id,
+            'leave_type_id' => $leaveType->id,
+            'approver_id' => $manager->id,
+        ]);
+
+        $this->actingAs($manager);
+
+        Livewire::test(ApprovalQueue::class)
+            ->assertSee('Still Pending')
+            ->assertDontSee('Already Decided');
+    }
+
+    public function test_manager_can_switch_between_pending_and_history_tabs(): void
+    {
+        $manager = User::factory()->manager()->create();
+        $leaveType = LeaveType::factory()->create();
+
+        $pendingEmployee = User::factory()->create(['name' => 'Manager Pending Case', 'manager_id' => $manager->id]);
+        $decidedEmployee = User::factory()->create(['name' => 'Manager Decided Case']);
+
+        LeaveRequest::factory()->create([
+            'user_id' => $pendingEmployee->id,
+            'leave_type_id' => $leaveType->id,
+            'status' => 'pending_manager',
+        ]);
+
+        LeaveRequest::factory()->approved()->create([
+            'user_id' => $decidedEmployee->id,
+            'leave_type_id' => $leaveType->id,
+            'approver_id' => $manager->id,
+        ]);
+
+        $this->actingAs($manager);
+
+        Livewire::test(ApprovalQueue::class)
+            ->assertSee('Manager Pending Case')
+            ->assertDontSee('Manager Decided Case')
+            ->call('setTab', 'history')
+            ->assertDontSee('Manager Pending Case')
+            ->assertSee('Manager Decided Case');
+    }
+
+    public function test_hr_can_switch_between_pending_and_history_tabs(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $leaveType = LeaveType::factory()->create();
+
+        $pendingEmployee = User::factory()->create(['name' => 'HR Pending Case']);
+        $decidedEmployee = User::factory()->create(['name' => 'HR Decided Case']);
+
+        LeaveRequest::factory()->pendingHr()->create([
+            'user_id' => $pendingEmployee->id,
+            'leave_type_id' => $leaveType->id,
+        ]);
+
+        LeaveRequest::factory()->approved()->create([
+            'user_id' => $decidedEmployee->id,
+            'leave_type_id' => $leaveType->id,
+        ]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(LeaveApprovals::class)
+            ->assertSee('HR Pending Case')
+            ->assertDontSee('HR Decided Case')
+            ->call('setTab', 'history')
+            ->assertDontSee('HR Pending Case')
+            ->assertSee('HR Decided Case');
+    }
+
+    public function test_manager_history_is_paginated(): void
+    {
+        $manager = User::factory()->manager()->create();
+        $leaveType = LeaveType::factory()->create();
+
+        foreach (range(1, 12) as $i) {
+            LeaveRequest::factory()->approved()->create([
+                'user_id' => User::factory()->create(['name' => sprintf('History Row %02d', $i)])->id,
+                'leave_type_id' => $leaveType->id,
+                'approver_id' => $manager->id,
+                'decided_at' => now()->subDays($i),
+            ]);
+        }
+
+        $this->actingAs($manager);
+
+        // Ordered newest-decided-first: rows 01-10 (most recent) on page 1, 11-12 on page 2.
+        // Zero-padded so e.g. "Row 01" can never accidentally substring-match "Row 11".
+        Livewire::test(ApprovalQueue::class)
+            ->call('setTab', 'history')
+            ->assertSee('History Row 01')
+            ->assertSee('History Row 10')
+            ->assertDontSee('History Row 11')
+            ->assertDontSee('History Row 12')
+            ->call('gotoPage', 2)
+            ->assertSee('History Row 11')
+            ->assertSee('History Row 12')
+            ->assertDontSee('History Row 01');
+    }
+
+    public function test_hr_history_is_paginated(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $leaveType = LeaveType::factory()->create();
+
+        foreach (range(1, 12) as $i) {
+            LeaveRequest::factory()->approved()->create([
+                'user_id' => User::factory()->create(['name' => sprintf('HR History Row %02d', $i)])->id,
+                'leave_type_id' => $leaveType->id,
+                'decided_at' => now()->subDays($i),
+            ]);
+        }
+
+        $this->actingAs($hr);
+
+        Livewire::test(LeaveApprovals::class)
+            ->call('setTab', 'history')
+            ->assertSee('HR History Row 01')
+            ->assertSee('HR History Row 10')
+            ->assertDontSee('HR History Row 11')
+            ->call('gotoPage', 2)
+            ->assertSee('HR History Row 11')
+            ->assertSee('HR History Row 12');
+    }
+
+    public function test_switching_tabs_resets_pagination_to_page_one(): void
+    {
+        $manager = User::factory()->manager()->create();
+        $leaveType = LeaveType::factory()->create();
+
+        foreach (range(1, 12) as $i) {
+            LeaveRequest::factory()->approved()->create([
+                'user_id' => User::factory()->create(['name' => sprintf('Reset Row %02d', $i)])->id,
+                'leave_type_id' => $leaveType->id,
+                'approver_id' => $manager->id,
+                'decided_at' => now()->subDays($i),
+            ]);
+        }
+
+        $this->actingAs($manager);
+
+        Livewire::test(ApprovalQueue::class)
+            ->call('setTab', 'history')
+            ->call('gotoPage', 2)
+            ->assertSee('Reset Row 11')
+            ->call('setTab', 'pending')
+            ->call('setTab', 'history')
+            ->assertSee('Reset Row 01')
+            ->assertDontSee('Reset Row 11');
+    }
 }

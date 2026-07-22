@@ -13,6 +13,7 @@ use App\Notifications\LeaveRequestStatusNotification;
 use App\Notifications\NewLeaveRequestNotification;
 use Carbon\CarbonImmutable;
 use DomainException;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
@@ -362,6 +363,40 @@ final class LeaveRequestService
     }
 
     /**
+     * Decided requests this manager has personally touched — approver_id
+     * alone is the correct scope here, not current team membership. It
+     * covers both requests they rejected themselves AND the eventual
+     * outcome of anything they forwarded to HR (approver_id is set once,
+     * when they act, and never changes afterward regardless of what HR
+     * later decides), so a manager can always see what happened to a
+     * request after it left their hands.
+     */
+    public function historyForApprover(int $managerId, int $perPage = 10): LengthAwarePaginator
+    {
+        return DB::table('leave_requests')
+            ->join('users', 'users.id', '=', 'leave_requests.user_id')
+            ->join('leave_types', 'leave_types.id', '=', 'leave_requests.leave_type_id')
+            ->leftJoin('users as hr_approvers', 'hr_approvers.id', '=', 'leave_requests.hr_approver_id')
+            ->where('leave_requests.approver_id', $managerId)
+            ->whereIn('leave_requests.status', [LeaveRequestStatus::Approved->value, LeaveRequestStatus::Rejected->value])
+            ->select(
+                'leave_requests.id',
+                'users.name as employee_name',
+                'leave_types.name as leave_type_name',
+                'leave_requests.start_date',
+                'leave_requests.end_date',
+                'leave_requests.is_half_day',
+                'leave_requests.total_days',
+                'leave_requests.status',
+                'leave_requests.decision_note',
+                'leave_requests.decided_at',
+                'hr_approvers.name as hr_approver_name',
+            )
+            ->orderByDesc('leave_requests.decided_at')
+            ->paginate($perPage);
+    }
+
+    /**
      * Company-wide PendingHR requests — every request a manager has
      * already forwarded and that now needs HR's final sign-off. Unlike
      * pendingForApprover(), this isn't scoped to any one manager's team:
@@ -391,6 +426,38 @@ final class LeaveRequestService
             ->orderBy('leave_requests.start_date')
             ->get()
             ->all();
+    }
+
+    /**
+     * Company-wide decided requests (approved or rejected), regardless of
+     * which HR user gave the final sign-off — consistent with
+     * pendingForHr() already being company-wide rather than scoped to a
+     * specific HR user's own actions.
+     */
+    public function historyForHr(int $perPage = 10): LengthAwarePaginator
+    {
+        return DB::table('leave_requests')
+            ->join('users', 'users.id', '=', 'leave_requests.user_id')
+            ->join('leave_types', 'leave_types.id', '=', 'leave_requests.leave_type_id')
+            ->leftJoin('users as managers', 'managers.id', '=', 'leave_requests.approver_id')
+            ->leftJoin('users as hr_approvers', 'hr_approvers.id', '=', 'leave_requests.hr_approver_id')
+            ->whereIn('leave_requests.status', [LeaveRequestStatus::Approved->value, LeaveRequestStatus::Rejected->value])
+            ->select(
+                'leave_requests.id',
+                'users.name as employee_name',
+                'leave_types.name as leave_type_name',
+                'leave_requests.start_date',
+                'leave_requests.end_date',
+                'leave_requests.is_half_day',
+                'leave_requests.total_days',
+                'leave_requests.status',
+                'leave_requests.decision_note',
+                'leave_requests.decided_at',
+                'managers.name as manager_name',
+                'hr_approvers.name as hr_approver_name',
+            )
+            ->orderByDesc('leave_requests.decided_at')
+            ->paginate($perPage);
     }
 
     /**
