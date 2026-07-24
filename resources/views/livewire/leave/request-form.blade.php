@@ -23,15 +23,11 @@
         <h3 class="text-lg font-semibold text-slate-900 mb-4">Apply for Leave</h3>
 
         @if ($successMessage)
-            <div class="mb-4 rounded-lg bg-emerald-50 p-4 text-sm text-emerald-700">
-                {{ $successMessage }}
-            </div>
+            <x-alert-banner type="success" class="mb-4">{{ $successMessage }}</x-alert-banner>
         @endif
 
         @error('form')
-            <div class="mb-4 rounded-lg bg-red-50 p-4 text-sm text-red-700">
-                {{ $message }}
-            </div>
+            <x-alert-banner type="error" class="mb-4">{{ $message }}</x-alert-banner>
         @enderror
 
         <form wire:submit="submit" class="space-y-4">

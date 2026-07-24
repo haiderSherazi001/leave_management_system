@@ -2,9 +2,7 @@
 
 <div class="space-y-6">
     @if ($successMessage)
-        <div class="rounded-lg bg-emerald-50 p-4 text-sm text-emerald-700">
-            {{ $successMessage }}
-        </div>
+        <x-alert-banner type="success">{{ $successMessage }}</x-alert-banner>
     @endif
 
     <x-card>

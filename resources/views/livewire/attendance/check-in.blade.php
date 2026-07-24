@@ -2,9 +2,7 @@
 
 <div class="space-y-6">
     @if ($errorMessage)
-        <div class="rounded-lg bg-red-50 p-4 text-sm text-red-700">
-            {{ $errorMessage }}
-        </div>
+        <x-alert-banner type="error">{{ $errorMessage }}</x-alert-banner>
     @endif
 
     <x-card>
@@ -37,7 +35,20 @@
             </div>
         @else
             <div x-data="{ capturing: false, locationError: null }" class="mt-6">
-                <div class="mb-4 rounded-lg bg-red-50 p-4 text-sm text-red-700" x-show="locationError" x-text="locationError" style="display: none;"></div>
+                {{-- x-show toggles visibility without removing the element from the DOM, so
+                     x-init alone would only ever fire once (on page load) - $watch reacts
+                     every time locationError actually changes instead, including a repeat
+                     failure (the click handler resets it to null first, so "denied" ->
+                     null -> "denied" again still counts as two distinct changes). --}}
+                <div
+                    class="mb-4 rounded-lg bg-red-50 p-4 text-sm text-red-700 outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    x-show="locationError"
+                    x-text="locationError"
+                    role="alert"
+                    tabindex="-1"
+                    x-init="$watch('locationError', (value) => { if (value) $nextTick(() => $el.focus()); })"
+                    style="display: none;"
+                ></div>
 
                 <div class="flex gap-3">
                     {{-- The geolocation call lives directly in @click (not a method

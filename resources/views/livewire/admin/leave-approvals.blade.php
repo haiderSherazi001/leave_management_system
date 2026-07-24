@@ -15,9 +15,7 @@
     </div>
 
     @if ($errorMessage)
-        <div class="mb-4 rounded-lg bg-red-50 p-4 text-sm text-red-700">
-            {{ $errorMessage }}
-        </div>
+        <x-alert-banner type="error" class="mb-4">{{ $errorMessage }}</x-alert-banner>
     @endif
 
     @if ($tab === 'pending')

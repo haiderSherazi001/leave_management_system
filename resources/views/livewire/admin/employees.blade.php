@@ -94,9 +94,7 @@
     @endif
 
     @if ($errorMessage)
-        <div class="rounded-lg bg-red-50 p-4 text-sm text-red-700">
-            {{ $errorMessage }}
-        </div>
+        <x-alert-banner type="error">{{ $errorMessage }}</x-alert-banner>
     @endif
 
     <x-card padding="p-0">
