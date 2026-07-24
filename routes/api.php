@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\LeaveController;
+use App\Http\Controllers\Api\ManagerLeaveController;
 use App\Http\Controllers\Api\PayrollController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -35,5 +36,12 @@ Route::middleware('auth:sanctum')->prefix('v1')->group(function () {
         Route::post('/requests', [LeaveController::class, 'store']);
         Route::get('/requests', [LeaveController::class, 'history']);
         Route::get('/holidays/upcoming', [LeaveController::class, 'upcomingHolidays']);
+    });
+
+    Route::prefix('manager')->group(function () {
+        Route::get('/leave-requests/pending', [ManagerLeaveController::class, 'pending']);
+        Route::get('/leave-requests/history', [ManagerLeaveController::class, 'history']);
+        Route::post('/leave-requests/{leaveRequestId}/approve', [ManagerLeaveController::class, 'approve']);
+        Route::post('/leave-requests/{leaveRequestId}/reject', [ManagerLeaveController::class, 'reject']);
     });
 });
