@@ -13,9 +13,12 @@ use App\Notifications\LeaveRequestStatusNotification;
 use App\Notifications\NewLeaveRequestNotification;
 use Carbon\CarbonImmutable;
 use DomainException;
+use Illuminate\Notifications\Notification;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 final class LeaveRequestService
 {
@@ -504,6 +507,25 @@ final class LeaveRequestService
     }
 
     /**
+     * Notification delivery is a best-effort side effect, not part of the
+     * core business action — a mail server being unreachable (e.g. Mailpit
+     * not running locally) must never crash an otherwise-successful leave
+     * submission or decision. Same "allowed to fail silently, but logged"
+     * philosophy this app already applies to the attendance auto-link.
+     */
+    private function safeNotify(User $notifiable, Notification $notification): void
+    {
+        try {
+            $notifiable->notify($notification);
+        } catch (Throwable $exception) {
+            Log::warning('Notification delivery failed: '.$notification::class, [
+                'notifiable_id' => $notifiable->id,
+                'exception' => $exception->getMessage(),
+            ]);
+        }
+    }
+
+    /**
      * Notifies the employee's one assigned manager — their direct manager_id
      * if set, otherwise their department's manager (same priority rule used
      * by LeaveRequestPolicy and pendingForApprover(): the department manager
@@ -539,7 +561,11 @@ final class LeaveRequestService
 
         $manager = User::find($managerId);
 
-        $manager?->notify(new NewLeaveRequestNotification(
+        if ($manager === null) {
+            return;
+        }
+
+        $this->safeNotify($manager, new NewLeaveRequestNotification(
             leaveRequestId: $leaveRequestId,
             employeeName: $employeeName,
             leaveTypeName: $leaveTypeName,
@@ -566,7 +592,7 @@ final class LeaveRequestService
         $isSelfSubmitted = $leaveRequest->user_id === $manager->id;
 
         foreach ($hrUsers as $hrUser) {
-            $hrUser->notify(new LeaveRequestAwaitingHrApprovalNotification(
+            $this->safeNotify($hrUser, new LeaveRequestAwaitingHrApprovalNotification(
                 leaveRequestId: $leaveRequest->id,
                 employeeName: $employeeName,
                 leaveTypeName: $leaveTypeName,
@@ -616,7 +642,7 @@ final class LeaveRequestService
 
         $leaveTypeName = DB::table('leave_types')->where('id', $leaveRequest->leave_type_id)->value('name') ?? 'Leave';
 
-        $employee->notify(new LeaveRequestStatusNotification(
+        $this->safeNotify($employee, new LeaveRequestStatusNotification(
             leaveRequestId: $leaveRequest->id,
             leaveTypeName: $leaveTypeName,
             startDate: $leaveRequest->start_date->toDateString(),
