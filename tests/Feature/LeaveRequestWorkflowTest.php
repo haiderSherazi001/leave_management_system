@@ -379,6 +379,39 @@ class LeaveRequestWorkflowTest extends TestCase
         $this->assertDatabaseCount('leave_requests', 0);
     }
 
+    public function test_half_day_request_on_a_holiday_is_rejected(): void
+    {
+        $leaveType = LeaveType::factory()->create(['yearly_allocation_days' => 10]);
+        $employee = User::factory()->create();
+        $holidayDate = now()->addDays(5)->toDateString();
+        Holiday::factory()->create(['date' => $holidayDate, 'name' => 'Founders Day']);
+
+        LeaveBalance::factory()->create([
+            'user_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'year' => now()->year,
+            'allocated_days' => 10,
+            'used_days' => 0,
+        ]);
+
+        $this->actingAs($employee);
+
+        Livewire::test(RequestForm::class)
+            ->set('leaveTypeId', $leaveType->id)
+            ->set('startDate', $holidayDate)
+            ->set('isHalfDay', true)
+            ->set('reason', 'Doctor appointment')
+            ->call('submit')
+            ->assertHasErrors('form');
+
+        $this->assertDatabaseCount('leave_requests', 0);
+        $this->assertDatabaseHas('leave_balances', [
+            'user_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'used_days' => 0,
+        ]);
+    }
+
     public function test_manager_cannot_approve_a_request_outside_their_own_team(): void
     {
         $managerA = User::factory()->manager()->create();

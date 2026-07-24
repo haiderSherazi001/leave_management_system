@@ -29,15 +29,18 @@ final class LeaveRequestService
     ) {}
 
     /**
-     * Half-day is always exactly 0.5 (it's one explicit chosen day). For a
-     * multi-day range, only working days count — weekends and configured
-     * holidays are excluded so a request spanning a holiday doesn't consume
-     * balance for a day the employee wasn't scheduled to work anyway.
+     * Half-day is 0.5 for that one chosen day, but only if it's actually a
+     * working day — a half-day request on a weekend/holiday has no working
+     * time to take off, so it counts as zero (submit() below rejects any
+     * zero-day request). For a multi-day range, only working days count —
+     * weekends and configured holidays are excluded so a request spanning a
+     * holiday doesn't consume balance for a day the employee wasn't
+     * scheduled to work anyway.
      */
     public function calculateTotalDays(CarbonImmutable $startDate, CarbonImmutable $endDate, bool $isHalfDay): float
     {
         if ($isHalfDay) {
-            return 0.5;
+            return $this->schedule->isWorkingDay($startDate->toDateString()) ? 0.5 : 0.0;
         }
 
         $days = 0.0;
