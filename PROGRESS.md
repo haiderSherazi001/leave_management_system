@@ -660,3 +660,32 @@ A follow-up question from the user about whether Livewire itself was making the 
 ### Plan for next session
 
 All four phases in `CLAUDE.md` are now functionally complete. No specific next feature has been requested yet — worth checking with the user before starting anything new.
+
+## 2026-07-24 — Manager mobile API, two bug fixes, alert-focus accessibility (branch: `main`)
+
+### Work done
+
+**Manager-role mobile API** (`feature/manager-mobile-api`, merged as `452f172`): new `Api\ManagerLeaveController` (`pending`/`history`/`approve`/`reject`), thin wrapper over the existing `LeaveRequestService` exactly like the Employee mobile API before it — no service changes needed. `history` is the one paginated mobile endpoint so far, returning Laravel's raw paginator shape at the top level rather than the usual `{"data": ...}` wrapper, since that's what the equivalent web history tab already expects. 6 new tests in `ManagerLeaveApiTest` (team-scoping, 403 for non-managers and for another team's request, approve forwards to HR without deducting balance, reject is final, history). Full suite: 208/208 passing. `d:\FlutterProjects\leave_desk\CLAUDE.md` updated the same session to document the new endpoints for the Flutter side, which built its Manager Approval Queue screen against this later the same day.
+
+### Bugs found and fixed
+
+**Bug 1 — notification delivery failure crashed leave-workflow actions.** User-reported: connecting Mailpit locally means the whole app crashes with an unhandled `Symfony\Component\Mailer\Exception\TransportException` whenever Mailpit isn't actually running. Confirmed via a rolled-back-transaction `tinker` script that overrode `mail.mailers.smtp.port` to an unreachable port and called `LeaveRequestService::submit()` directly — the exception propagated all the way up even though the leave request row had already been written to the database. Every `->notify()` call in `LeaveRequestService` (`notifyManagersOfNewRequest`, `notifyHrOfPendingApproval`, `notifyEmployeeOfDecision`) was unguarded. Fixed with a `safeNotify()` private helper wrapping `->notify()` in try/catch(`Throwable`), logging a warning instead of throwing — same "best-effort, log don't crash" philosophy already applied to the attendance-on-leave auto-link. Re-ran the exact crash reproduction afterward and confirmed `submit()` now returns successfully with the request still created. Full suite: 209/209 passing (existing `Notification::fake()`-based tests unaffected). `fix/notification-delivery-not-blocking` merged as `1aac8bf`.
+
+**Bug 2 — half-day leave request on a non-working day silently accepted.** User-reported. Root cause: `LeaveRequestService::calculateTotalDays()` always returned a hardcoded `0.5` for half-day requests without ever checking `WorkScheduleService::isWorkingDay()` — full-day/multi-day requests were already correct (they sum only working days and reject a zero-day result), but the half-day path skipped that guard entirely, so picking a weekend or holiday deducted 0.5 days of balance for a day the employee was never scheduled to work. Fixed by making the half-day case check `isWorkingDay()` too, returning `0.0` on a non-working day — the existing `submit()` guard (`totalDays <= 0.0` → "does not include any working days") now catches it with no other code path changes needed. New regression test `test_half_day_request_on_a_holiday_is_rejected` in `LeaveRequestWorkflowTest`. Full suite: 209/209 passing. `fix/half-day-non-working-day` merged as `37cc340`.
+
+### Work done (continued)
+
+**Alert-focus accessibility pass** (`feature/alert-focus-accessibility`, merged as `d97a0e0`): every Livewire form's success/error message (`request-form`, `approval-queue`, `leave-approvals`, `employees`, `work-schedule`, `check-in`) was a plain, non-focusable `<div>` — a keyboard/screen-reader user had no signal an action completed. New shared `<x-alert-banner>` component adds `role="status"`/`"alert"`, `tabindex="-1"`, and an Alpine `x-init="$el.focus()"`. `wire:key` gets a fresh random value on every render specifically so Livewire's diffing always treats the element as new (not a no-op when the message text repeats) — otherwise a second identical error in a row wouldn't re-trigger focus. `check-in.blade.php`'s client-side geolocation error is pure Alpine (`x-show`, never removed from the DOM), so it uses `$watch('locationError', ...)` instead, since `x-init` alone would only ever fire once at page load.
+
+### Verification
+
+- Full suite: 209/209 passing across all three changes above.
+- No browser-automation tool available in this environment to verify the focus behavior directly; user confirmed manually against the running dev server that focus moves to the alert as expected.
+
+### Issues and blockers
+
+None new. Note: this entry only covers Laravel-side work from today's session — the Employee-facing mobile API and leave-approval-history features (merged `554cb45`/`71b3be0` on 2026-07-22) were built in an earlier session not covered by this log; add a backfill entry for those if that detail is ever needed.
+
+### Plan for next session
+
+No specific next Laravel-side feature requested yet. Mobile-side plan (documented in the Flutter repo's `CLAUDE.md`/`report.md`) is a polish pass — expanded test coverage, UI/UX consistency, real-world edge cases — before HR mobile or push notifications.
