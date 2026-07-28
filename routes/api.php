@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\HrLeaveController;
 use App\Http\Controllers\Api\LeaveController;
 use App\Http\Controllers\Api\ManagerLeaveController;
 use App\Http\Controllers\Api\PayrollController;
@@ -43,5 +44,12 @@ Route::middleware('auth:sanctum')->prefix('v1')->group(function () {
         Route::get('/leave-requests/history', [ManagerLeaveController::class, 'history']);
         Route::post('/leave-requests/{leaveRequestId}/approve', [ManagerLeaveController::class, 'approve']);
         Route::post('/leave-requests/{leaveRequestId}/reject', [ManagerLeaveController::class, 'reject']);
+    });
+
+    Route::prefix('hr')->group(function () {
+        Route::get('/leave-requests/pending', [HrLeaveController::class, 'pending']);
+        Route::get('/leave-requests/history', [HrLeaveController::class, 'history']);
+        Route::post('/leave-requests/{leaveRequestId}/approve', [HrLeaveController::class, 'approve']);
+        Route::post('/leave-requests/{leaveRequestId}/reject', [HrLeaveController::class, 'reject']);
     });
 });
