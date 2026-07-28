@@ -6,11 +6,19 @@ namespace Tests\Feature\Api;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 class AttendanceApiTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
+    }
 
     /**
      * @return array{0: float, 1: float}
@@ -99,6 +107,28 @@ class AttendanceApiTest extends TestCase
         $this->withHeaders($headers)
             ->getJson('/api/v1/attendance/today')
             ->assertJson(['data' => ['has_checked_in' => true, 'has_checked_out' => true]]);
+    }
+
+    public function test_worked_minutes_reflects_time_so_far_then_the_final_total_after_checkout(): void
+    {
+        $user = User::factory()->create();
+        [$lat, $lon] = $this->officeCoordinates();
+        $headers = $this->authHeader($user);
+
+        Carbon::setTestNow(Carbon::parse('2026-08-03 09:00:00'));
+        $this->withHeaders($headers)->postJson('/api/v1/attendance/check-in', ['latitude' => $lat, 'longitude' => $lon])->assertOk();
+
+        Carbon::setTestNow(Carbon::parse('2026-08-03 11:30:00'));
+        $this->withHeaders($headers)
+            ->getJson('/api/v1/attendance/today')
+            ->assertOk()
+            ->assertJsonPath('data.record.worked_minutes', 150);
+
+        Carbon::setTestNow(Carbon::parse('2026-08-03 17:00:00'));
+        $this->withHeaders($headers)
+            ->postJson('/api/v1/attendance/check-out')
+            ->assertOk()
+            ->assertJsonPath('data.worked_minutes', 480);
     }
 
     public function test_history_respects_the_limit_parameter(): void

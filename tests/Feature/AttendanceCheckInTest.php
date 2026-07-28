@@ -134,6 +134,27 @@ class AttendanceCheckInTest extends TestCase
         $this->assertNotNull($record->check_out_at);
     }
 
+    public function test_hours_worked_shows_in_progress_duration_then_the_final_total_after_checkout(): void
+    {
+        $employee = User::factory()->create();
+        $this->actingAs($employee);
+
+        Carbon::setTestNow(Carbon::parse('2026-08-03 09:00:00'));
+        Livewire::test(CheckIn::class)->call('checkIn', ...$this->officeCoordinates());
+
+        Carbon::setTestNow(Carbon::parse('2026-08-03 11:30:00'));
+        Livewire::test(CheckIn::class)
+            ->assertSee('2h 30m')
+            ->assertSee('In progress');
+
+        Carbon::setTestNow(Carbon::parse('2026-08-03 17:00:00'));
+        Livewire::test(CheckIn::class)->call('checkOut');
+
+        Livewire::test(CheckIn::class)
+            ->assertSee('8h 0m')
+            ->assertDontSee('In progress');
+    }
+
     public function test_employee_cannot_check_out_before_checking_in(): void
     {
         $employee = User::factory()->create();

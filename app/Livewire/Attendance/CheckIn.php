@@ -51,10 +51,21 @@ class CheckIn extends Component
     public function render(AttendanceService $service, HolidayService $holidays): View
     {
         $userId = (int) Auth::id();
+        $today = $service->findForDate($userId, now()->toDateString());
+        $history = $service->historyForUser($userId, 14);
+
+        foreach ($history as $record) {
+            $record->duration_label = $service->formatDuration(
+                $service->minutesWorked($record->check_in_at, $record->check_out_at)
+            );
+        }
 
         return view('livewire.attendance.check-in', [
-            'today' => $service->findForDate($userId, now()->toDateString()),
-            'history' => $service->historyForUser($userId, 14),
+            'today' => $today,
+            'todayDuration' => $today !== null
+                ? $service->formatDuration($service->minutesWorked($today->check_in_at, $today->check_out_at))
+                : null,
+            'history' => $history,
             'todayHoliday' => $holidays->forDate(now()->toDateString()),
         ]);
     }

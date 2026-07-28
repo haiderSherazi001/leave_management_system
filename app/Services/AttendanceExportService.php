@@ -16,6 +16,7 @@ final class AttendanceExportService
 {
     public function __construct(
         private readonly WorkScheduleService $schedule,
+        private readonly AttendanceService $attendance,
     ) {}
 
     /**
@@ -28,7 +29,7 @@ final class AttendanceExportService
      * calculation in this app (calculateTotalDays(), the attendance
      * auto-link) already treats "a day of work".
      *
-     * @return Collection<int, array{user_id: int, name: string, date: string, check_in: ?string, check_out: ?string, status: string}>
+     * @return Collection<int, array{user_id: int, name: string, date: string, check_in: ?string, check_out: ?string, status: string, worked_minutes: ?int, hours_worked: string}>
      */
     public function rowsBetween(string $start, string $end): Collection
     {
@@ -37,7 +38,7 @@ final class AttendanceExportService
         $attendanceByKey = Attendance::with('user')
             ->whereBetween('date', [$start, $end])
             ->get()
-            ->keyBy(fn (Attendance $attendance) => $attendance->user_id.'|'.$attendance->date->toDateString());
+            ->keyBy(fn (Attendance $attendance) => $attendance->user_id.'|'.$attendance->date);
 
         $leaveDateKeys = $this->approvedLeaveDateKeys($start, $end);
 
@@ -63,7 +64,7 @@ final class AttendanceExportService
     /**
      * @param  Collection<string, Attendance>  $attendanceByKey
      * @param  Collection<string, int>  $leaveDateKeys
-     * @return array{user_id: int, name: string, date: string, check_in: ?string, check_out: ?string, status: string}
+     * @return array{user_id: int, name: string, date: string, check_in: ?string, check_out: ?string, status: string, worked_minutes: ?int, hours_worked: string}
      */
     private function rowFor(User $user, string $date, Collection $attendanceByKey, Collection $leaveDateKeys): array
     {
@@ -71,6 +72,8 @@ final class AttendanceExportService
         $attendance = $attendanceByKey->get($key);
 
         if ($attendance !== null) {
+            $workedMinutes = $this->attendance->minutesWorked($attendance->check_in_at, $attendance->check_out_at);
+
             return [
                 'user_id' => $user->id,
                 'name' => $user->name,
@@ -78,6 +81,8 @@ final class AttendanceExportService
                 'check_in' => $attendance->check_in_at?->format('g:i A'),
                 'check_out' => $attendance->check_out_at?->format('g:i A'),
                 'status' => $attendance->status->label(),
+                'worked_minutes' => $workedMinutes,
+                'hours_worked' => $this->attendance->formatDuration($workedMinutes),
             ];
         }
 
@@ -88,6 +93,8 @@ final class AttendanceExportService
             'check_in' => null,
             'check_out' => null,
             'status' => $leaveDateKeys->has($key) ? AttendanceStatus::OnLeave->label() : AttendanceStatus::Absent->label(),
+            'worked_minutes' => null,
+            'hours_worked' => '—',
         ];
     }
 
@@ -99,7 +106,7 @@ final class AttendanceExportService
      * export: synthesized per working day, not a raw count of stored
      * attendance rows (this app never writes an `absent` row at all).
      *
-     * @return Collection<int, array{user_id: int, name: string, days_present: int, days_absent_or_late: int, approved_leave_days: int}>
+     * @return Collection<int, array{user_id: int, name: string, days_present: int, days_absent_or_late: int, approved_leave_days: int, total_hours_worked: float}>
      */
     public function summaryBetween(string $start, string $end): Collection
     {
@@ -117,6 +124,7 @@ final class AttendanceExportService
                         AttendanceStatus::Late->label(),
                     ])->count(),
                     'approved_leave_days' => $rows->where('status', AttendanceStatus::OnLeave->label())->count(),
+                    'total_hours_worked' => round($rows->sum('worked_minutes') / 60, 2),
                 ];
             })
             ->values();

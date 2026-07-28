@@ -22,10 +22,20 @@ class Attendance extends Model
         'notes',
     ];
 
+    /**
+     * No 'date' cast, deliberately - same reasoning as Holiday's date column:
+     * casting to 'date' serializes back to the DB using getDateFormat()
+     * (a full "Y-m-d H:i:s" datetime string on this connection), which a
+     * strict-affinity DB like MySQL truncates to a bare date but SQLite
+     * (used in tests) stores verbatim - making a row's own date compare as
+     * "greater than" a plain "Y-m-d" whereBetween() upper bound that
+     * equals it, silently dropping it from the range. The app itself never
+     * writes attendance through Eloquent (AttendanceService uses DB::table()
+     * with a plain toDateString()), so nothing needs the cast.
+     */
     protected function casts(): array
     {
         return [
-            'date' => 'date',
             'check_in_at' => 'datetime',
             'check_out_at' => 'datetime',
             'status' => AttendanceStatus::class,

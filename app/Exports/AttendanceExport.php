@@ -28,11 +28,11 @@ final class AttendanceExport implements FromCollection, WithHeadings, WithMappin
      */
     public function headings(): array
     {
-        return ['Employee Name', 'Date', 'Check-in Time', 'Check-out Time', 'Status'];
+        return ['Employee Name', 'Date', 'Check-in Time', 'Check-out Time', 'Hours Worked', 'Status'];
     }
 
     /**
-     * @param  array{name: string, date: string, check_in: ?string, check_out: ?string, status: string}  $row
+     * @param  array{name: string, date: string, check_in: ?string, check_out: ?string, hours_worked: string, status: string}  $row
      * @return array<int, string>
      */
     public function map($row): array
@@ -42,6 +42,7 @@ final class AttendanceExport implements FromCollection, WithHeadings, WithMappin
             $row['date'],
             $row['check_in'] ?? '—',
             $row['check_out'] ?? '—',
+            $row['hours_worked'],
             $row['status'],
         ];
     }

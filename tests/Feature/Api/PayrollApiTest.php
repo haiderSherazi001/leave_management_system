@@ -84,7 +84,7 @@ class PayrollApiTest extends TestCase
                 'start_date',
                 'end_date',
                 'employees' => [
-                    '*' => ['user_id', 'name', 'days_present', 'days_absent_or_late', 'approved_leave_days'],
+                    '*' => ['user_id', 'name', 'days_present', 'days_absent_or_late', 'approved_leave_days', 'total_hours_worked'],
                 ],
             ]);
 

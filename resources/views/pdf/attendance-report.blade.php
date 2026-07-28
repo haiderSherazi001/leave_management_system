@@ -52,6 +52,7 @@
                 <th>Date</th>
                 <th>Check-in Time</th>
                 <th>Check-out Time</th>
+                <th>Hours Worked</th>
                 <th>Status</th>
             </tr>
         </thead>
@@ -62,11 +63,12 @@
                     <td>{{ $row['date'] }}</td>
                     <td>{{ $row['check_in'] ?? '—' }}</td>
                     <td>{{ $row['check_out'] ?? '—' }}</td>
+                    <td>{{ $row['hours_worked'] }}</td>
                     <td>{{ $row['status'] }}</td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="5">No attendance records for this date range.</td>
+                    <td colspan="6">No attendance records for this date range.</td>
                 </tr>
             @endforelse
         </tbody>

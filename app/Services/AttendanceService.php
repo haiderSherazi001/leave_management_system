@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Enums\AttendanceStatus;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -119,6 +120,35 @@ final class AttendanceService
             'status' => AttendanceStatus::OnLeave->value,
             'updated_at' => now(),
         ]);
+    }
+
+    /**
+     * Minutes between check-in and check-out, or check-in and now if still
+     * checked in — so a page showing "today" reflects time worked so far,
+     * not just a final total that only appears after checking out.
+     */
+    public function minutesWorked(CarbonInterface|string|null $checkInAt, CarbonInterface|string|null $checkOutAt): ?int
+    {
+        if ($checkInAt === null) {
+            return null;
+        }
+
+        $start = CarbonImmutable::parse($checkInAt);
+        $end = $checkOutAt !== null ? CarbonImmutable::parse($checkOutAt) : CarbonImmutable::now();
+
+        return max(0, intdiv($end->getTimestamp() - $start->getTimestamp(), 60));
+    }
+
+    public function formatDuration(?int $minutes): string
+    {
+        if ($minutes === null) {
+            return '—';
+        }
+
+        $hours = intdiv($minutes, 60);
+        $mins = $minutes % 60;
+
+        return $hours > 0 ? "{$hours}h {$mins}m" : "{$mins}m";
     }
 
     public function findForDate(int $userId, string $date): ?object

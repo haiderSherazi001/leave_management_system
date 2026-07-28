@@ -1,6 +1,9 @@
 <x-slot name="header">{{ __('Attendance') }}</x-slot>
 
-<div class="space-y-6">
+{{-- Polling only while checked in but not yet out, so "Hours Worked" keeps
+     ticking forward roughly every minute without a page refresh - stops on
+     its own once check-out happens, since the condition below goes false. --}}
+<div class="space-y-6" @if ($today?->check_in_at && ! $today?->check_out_at) wire:poll.60s @endif>
     @if ($errorMessage)
         <x-alert-banner type="error">{{ $errorMessage }}</x-alert-banner>
     @endif
@@ -19,6 +22,15 @@
                 <p class="text-sm text-slate-500">Check-out</p>
                 <p class="text-2xl font-semibold text-slate-900">
                     {{ $today?->check_out_at ? \Illuminate\Support\Carbon::parse($today->check_out_at)->format('g:i A') : '—' }}
+                </p>
+            </div>
+            <div>
+                <p class="text-sm text-slate-500">Hours Worked</p>
+                <p class="text-2xl font-semibold text-slate-900">
+                    {{ $todayDuration ?? '—' }}
+                    @if ($today?->check_in_at && ! $today?->check_out_at)
+                        <span class="ml-1 text-xs font-medium text-teal-600">In progress</span>
+                    @endif
                 </p>
             </div>
         </div>
@@ -109,6 +121,7 @@
                             <th class="py-2 pr-4 font-medium">Date</th>
                             <th class="py-2 pr-4 font-medium">Check-in</th>
                             <th class="py-2 pr-4 font-medium">Check-out</th>
+                            <th class="py-2 pr-4 font-medium">Hours</th>
                             <th class="py-2 pr-4 font-medium">Status</th>
                         </tr>
                     </thead>
@@ -118,6 +131,7 @@
                                 <td class="py-2.5 pr-4">{{ \Illuminate\Support\Carbon::parse($record->date)->format('M j, Y') }}</td>
                                 <td class="py-2.5 pr-4">{{ $record->check_in_at ? \Illuminate\Support\Carbon::parse($record->check_in_at)->format('g:i A') : '—' }}</td>
                                 <td class="py-2.5 pr-4">{{ $record->check_out_at ? \Illuminate\Support\Carbon::parse($record->check_out_at)->format('g:i A') : '—' }}</td>
+                                <td class="py-2.5 pr-4">{{ $record->duration_label }}</td>
                                 <td class="py-2.5 pr-4">
                                     <x-badge :color="match ($record->status) {
                                         'present' => 'emerald',

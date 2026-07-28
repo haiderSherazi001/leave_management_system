@@ -13,7 +13,7 @@ final class AttendanceController extends Controller
 {
     public function today(Request $request, AttendanceService $service): JsonResponse
     {
-        $record = $service->findForDate((int) $request->user()->id, now()->toDateString());
+        $record = $this->withDuration($service->findForDate((int) $request->user()->id, now()->toDateString()), $service);
 
         return response()->json([
             'data' => [
@@ -44,7 +44,7 @@ final class AttendanceController extends Controller
         $service->checkIn($userId, $today, (float) $validated['latitude'], (float) $validated['longitude']);
 
         return response()->json([
-            'data' => $service->findForDate($userId, $today),
+            'data' => $this->withDuration($service->findForDate($userId, $today), $service),
         ]);
     }
 
@@ -56,7 +56,7 @@ final class AttendanceController extends Controller
         $service->checkOut($userId, $today);
 
         return response()->json([
-            'data' => $service->findForDate($userId, $today),
+            'data' => $this->withDuration($service->findForDate($userId, $today), $service),
         ]);
     }
 
@@ -66,8 +66,26 @@ final class AttendanceController extends Controller
             'limit' => ['sometimes', 'integer', 'min:1', 'max:90'],
         ]);
 
-        return response()->json([
-            'data' => $service->historyForUser((int) $request->user()->id, (int) ($validated['limit'] ?? 30)),
-        ]);
+        $records = $service->historyForUser((int) $request->user()->id, (int) ($validated['limit'] ?? 30));
+
+        foreach ($records as $record) {
+            $this->withDuration($record, $service);
+        }
+
+        return response()->json(['data' => $records]);
+    }
+
+    /**
+     * worked_minutes is raw (not pre-formatted) so each client can format it
+     * however fits its own locale/UI, the same way dates are passed as ISO
+     * strings rather than pre-formatted text elsewhere in this API.
+     */
+    private function withDuration(?object $record, AttendanceService $service): ?object
+    {
+        if ($record !== null) {
+            $record->worked_minutes = $service->minutesWorked($record->check_in_at, $record->check_out_at);
+        }
+
+        return $record;
     }
 }
