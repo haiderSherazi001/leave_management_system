@@ -83,7 +83,7 @@ final class AttendanceController extends Controller
     private function withDuration(?object $record, AttendanceService $service): ?object
     {
         if ($record !== null) {
-            $record->worked_minutes = $service->minutesWorked($record->check_in_at, $record->check_out_at);
+            $record->worked_minutes = $service->minutesWorked($record->check_in_at, $record->check_out_at, $record->status);
         }
 
         return $record;

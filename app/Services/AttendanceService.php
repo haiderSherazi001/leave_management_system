@@ -126,10 +126,27 @@ final class AttendanceService
      * Minutes between check-in and check-out, or check-in and now if still
      * checked in — so a page showing "today" reflects time worked so far,
      * not just a final total that only appears after checking out.
+     *
+     * $status guards one specific case: an on_leave day with a check-in but
+     * no check-out yet (an accidental check-in, or a legitimate half-day-
+     * leave-then-worked-a-bit that hasn't been closed out). Counting that
+     * live, all the way to now, would show an ever-growing "hours worked"
+     * for someone who is, for the day, officially on leave - so it returns
+     * null (no live count) until they actually check out, at which point
+     * the real elapsed time is reported like any other completed session.
      */
-    public function minutesWorked(CarbonInterface|string|null $checkInAt, CarbonInterface|string|null $checkOutAt): ?int
-    {
+    public function minutesWorked(
+        CarbonInterface|string|null $checkInAt,
+        CarbonInterface|string|null $checkOutAt,
+        AttendanceStatus|string|null $status = null,
+    ): ?int {
         if ($checkInAt === null) {
+            return null;
+        }
+
+        $statusValue = $status instanceof AttendanceStatus ? $status->value : $status;
+
+        if ($checkOutAt === null && $statusValue === AttendanceStatus::OnLeave->value) {
             return null;
         }
 

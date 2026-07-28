@@ -1,9 +1,18 @@
 <x-slot name="header">{{ __('Attendance') }}</x-slot>
 
-{{-- Polling only while checked in but not yet out, so "Hours Worked" keeps
+@php
+    // "Still counting" only applies to a real, ongoing work session - not an
+    // on_leave day someone happened to check into (accidentally or for a
+    // half-day) without checking out. That case shouldn't show a live,
+    // ever-growing "hours worked" for a day that's officially leave.
+    $isCountingLive = $today?->check_in_at && ! $today?->check_out_at && $today?->status !== 'on_leave';
+@endphp
+
+{{-- Polling only while actually counting live, so "Hours Worked" keeps
      ticking forward roughly every minute without a page refresh - stops on
-     its own once check-out happens, since the condition below goes false. --}}
-<div class="space-y-6" @if ($today?->check_in_at && ! $today?->check_out_at) wire:poll.60s @endif>
+     its own once check-out happens (or was never live to begin with), since
+     $isCountingLive above goes false. --}}
+<div class="space-y-6" @if ($isCountingLive) wire:poll.60s @endif>
     @if ($errorMessage)
         <x-alert-banner type="error">{{ $errorMessage }}</x-alert-banner>
     @endif
@@ -28,7 +37,7 @@
                 <p class="text-sm text-slate-500">Hours Worked</p>
                 <p class="text-2xl font-semibold text-slate-900">
                     {{ $todayDuration ?? '—' }}
-                    @if ($today?->check_in_at && ! $today?->check_out_at)
+                    @if ($isCountingLive)
                         <span class="ml-1 text-xs font-medium text-teal-600">In progress</span>
                     @endif
                 </p>

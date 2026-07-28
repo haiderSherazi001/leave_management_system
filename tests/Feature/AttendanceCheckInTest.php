@@ -155,6 +155,23 @@ class AttendanceCheckInTest extends TestCase
             ->assertDontSee('In progress');
     }
 
+    public function test_hours_worked_does_not_count_live_when_checked_in_on_an_on_leave_day(): void
+    {
+        $employee = User::factory()->create();
+        $this->actingAs($employee);
+
+        Carbon::setTestNow(Carbon::parse('2026-08-03 09:00:00'));
+        $service = $this->app->make(AttendanceService::class);
+        $service->markOnLeave($employee->id, '2026-08-03');
+
+        Livewire::test(CheckIn::class)->call('checkIn', ...$this->officeCoordinates());
+
+        Carbon::setTestNow(Carbon::parse('2026-08-03 11:30:00'));
+        Livewire::test(CheckIn::class)
+            ->assertDontSee('In progress')
+            ->assertDontSee('2h 30m');
+    }
+
     public function test_employee_cannot_check_out_before_checking_in(): void
     {
         $employee = User::factory()->create();

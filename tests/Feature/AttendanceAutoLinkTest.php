@@ -188,5 +188,30 @@ class AttendanceAutoLinkTest extends TestCase
 
         $this->assertSame('on_leave', $record->status);
         $this->assertNotNull($record->check_in_at);
+
+        // Checked in but never checked out on a day that's on_leave - this
+        // must not report a live, ever-growing "hours worked" for a day
+        // that's officially leave (reported as a real user-facing bug: the
+        // web page kept showing a "still counting" duration for exactly
+        // this case).
+        $this->assertNull($service->minutesWorked($record->check_in_at, $record->check_out_at, $record->status));
+    }
+
+    public function test_checking_out_after_being_marked_on_leave_reports_the_real_worked_duration(): void
+    {
+        $employee = User::factory()->create();
+        $service = $this->app->make(AttendanceService::class);
+
+        $service->markOnLeave($employee->id, '2026-08-10');
+        $service->checkIn($employee->id, '2026-08-10', (float) config('attendance.office_latitude'), (float) config('attendance.office_longitude'));
+        $service->checkOut($employee->id, '2026-08-10');
+
+        $record = DB::table('attendances')->where('user_id', $employee->id)->where('date', '2026-08-10')->first();
+
+        // Once actually checked out, the real elapsed time is a completed
+        // fact (e.g. a half-day-leave employee who worked part of the day)
+        // and should still be reported - only the *live, still-counting*
+        // state is suppressed for an on_leave day, not a finished session.
+        $this->assertNotNull($service->minutesWorked($record->check_in_at, $record->check_out_at, $record->status));
     }
 }

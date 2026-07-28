@@ -72,7 +72,7 @@ final class AttendanceExportService
         $attendance = $attendanceByKey->get($key);
 
         if ($attendance !== null) {
-            $workedMinutes = $this->attendance->minutesWorked($attendance->check_in_at, $attendance->check_out_at);
+            $workedMinutes = $this->attendance->minutesWorked($attendance->check_in_at, $attendance->check_out_at, $attendance->status);
 
             return [
                 'user_id' => $user->id,

@@ -131,6 +131,28 @@ class AttendanceExportTest extends TestCase
         $this->assertSame(12.5, $summary->firstWhere('user_id', $employee->id)['total_hours_worked']);
     }
 
+    public function test_hours_worked_is_blank_for_an_on_leave_day_checked_in_but_not_checked_out(): void
+    {
+        WorkSchedule::factory()->create(['working_days' => [1, 2, 3, 4, 5]]);
+
+        $employee = User::factory()->create(['name' => 'Jane Employee']);
+        $monday = CarbonImmutable::now()->next(CarbonImmutable::MONDAY);
+
+        Attendance::factory()->onLeave()->create([
+            'user_id' => $employee->id,
+            'date' => $monday->toDateString(),
+            'check_in_at' => $monday->setTime(9, 0),
+            'check_out_at' => null,
+        ]);
+
+        $service = $this->app->make(AttendanceExportService::class);
+        $row = $service->rowsBetween($monday->toDateString(), $monday->toDateString())->first();
+
+        $this->assertSame('On Leave', $row['status']);
+        $this->assertNull($row['worked_minutes']);
+        $this->assertSame('—', $row['hours_worked']);
+    }
+
     public function test_export_service_skips_holidays(): void
     {
         WorkSchedule::factory()->create(['working_days' => [1, 2, 3, 4, 5]]);

@@ -56,14 +56,14 @@ class CheckIn extends Component
 
         foreach ($history as $record) {
             $record->duration_label = $service->formatDuration(
-                $service->minutesWorked($record->check_in_at, $record->check_out_at)
+                $service->minutesWorked($record->check_in_at, $record->check_out_at, $record->status)
             );
         }
 
         return view('livewire.attendance.check-in', [
             'today' => $today,
             'todayDuration' => $today !== null
-                ? $service->formatDuration($service->minutesWorked($today->check_in_at, $today->check_out_at))
+                ? $service->formatDuration($service->minutesWorked($today->check_in_at, $today->check_out_at, $today->status))
                 : null,
             'history' => $history,
             'todayHoliday' => $holidays->forDate(now()->toDateString()),
