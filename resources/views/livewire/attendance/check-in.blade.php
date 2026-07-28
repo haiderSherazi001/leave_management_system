@@ -8,11 +8,7 @@
     $isCountingLive = $today?->check_in_at && ! $today?->check_out_at && $today?->status !== 'on_leave';
 @endphp
 
-{{-- Polling only while actually counting live, so "Hours Worked" keeps
-     ticking forward roughly every minute without a page refresh - stops on
-     its own once check-out happens (or was never live to begin with), since
-     $isCountingLive above goes false. --}}
-<div class="space-y-6" @if ($isCountingLive) wire:poll.60s @endif>
+<div class="space-y-6">
     @if ($errorMessage)
         <x-alert-banner type="error">{{ $errorMessage }}</x-alert-banner>
     @endif
@@ -35,12 +31,45 @@
             </div>
             <div>
                 <p class="text-sm text-slate-500">Hours Worked</p>
-                <p class="text-2xl font-semibold text-slate-900">
-                    {{ $todayDuration ?? '—' }}
-                    @if ($isCountingLive)
-                        <span class="ml-1 text-xs font-medium text-teal-600">In progress</span>
-                    @endif
-                </p>
+                @if ($isCountingLive)
+                    {{-- Ticks client-side from the check-in timestamp, once a
+                         second - no server round-trip needed just to update a
+                         clock. Seconds precision only applies here, while
+                         still counting; a finished/checked-out day keeps the
+                         plain "Xh Ym" from formatDuration() below, matching
+                         the History table and every export. --}}
+                    <p
+                        class="text-2xl font-semibold text-slate-900"
+                        x-data="{
+                            startMs: {{ \Illuminate\Support\Carbon::parse($today->check_in_at)->timestamp }} * 1000,
+                            label: '',
+                            intervalId: null,
+                            tick() {
+                                // Self-terminates once Livewire removes this element
+                                // (e.g. right after check-out swaps to the static,
+                                // non-live branch) - otherwise the interval would
+                                // keep firing forever in the background with nothing
+                                // left to update.
+                                if (! this.$el.isConnected) {
+                                    clearInterval(this.intervalId);
+
+                                    return;
+                                }
+
+                                const totalSeconds = Math.max(0, Math.floor((Date.now() - this.startMs) / 1000));
+                                const h = Math.floor(totalSeconds / 3600);
+                                const m = Math.floor((totalSeconds % 3600) / 60);
+                                const s = totalSeconds % 60;
+                                this.label = (h > 0 ? h + 'h ' : '') + String(m).padStart(2, '0') + 'm ' + String(s).padStart(2, '0') + 's';
+                            },
+                        }"
+                        x-init="tick(); intervalId = setInterval(() => tick(), 1000)"
+                        x-text="label"
+                    ></p>
+                    <span class="text-xs font-medium text-teal-600">In progress</span>
+                @else
+                    <p class="text-2xl font-semibold text-slate-900">{{ $todayDuration ?? '—' }}</p>
+                @endif
             </div>
         </div>
 

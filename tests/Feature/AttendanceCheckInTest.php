@@ -141,10 +141,15 @@ class AttendanceCheckInTest extends TestCase
 
         Carbon::setTestNow(Carbon::parse('2026-08-03 09:00:00'));
         Livewire::test(CheckIn::class)->call('checkIn', ...$this->officeCoordinates());
+        $checkInTimestamp = Carbon::parse('2026-08-03 09:00:00')->timestamp;
 
+        // The live duration itself is now computed client-side (ticks every
+        // second via Alpine from this timestamp) - not observable in
+        // server-rendered HTML, so this only asserts the correct check-in
+        // moment was handed to the browser and the "In progress" state shows.
         Carbon::setTestNow(Carbon::parse('2026-08-03 11:30:00'));
         Livewire::test(CheckIn::class)
-            ->assertSee('2h 30m')
+            ->assertSeeHtml((string) $checkInTimestamp)
             ->assertSee('In progress');
 
         Carbon::setTestNow(Carbon::parse('2026-08-03 17:00:00'));
