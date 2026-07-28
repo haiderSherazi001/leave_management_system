@@ -689,3 +689,19 @@ None new. Note: this entry only covers Laravel-side work from today's session �
 ### Plan for next session
 
 No specific next Laravel-side feature requested yet. Mobile-side plan (documented in the Flutter repo's `CLAUDE.md`/`report.md`) is a polish pass — expanded test coverage, UI/UX consistency, real-world edge cases — before HR mobile or push notifications.
+
+## 2026-07-28 — HR-role mobile API (branch: `main`)
+
+### Work done
+
+**HR-role mobile API** (merged as `c3dc8c1`): new `Api\HrLeaveController` (`pending`/`history`/`approve`/`reject`), mirroring `ManagerLeaveController` exactly — thin wrapper over the existing `LeaveRequestService`, no service changes needed. Company-wide rather than team-scoped (`pendingForHr()`/`historyForHr()` aren't tied to any one HR user, matching the web app's `LeaveApprovals.php`), and `approve()` here calls `approveByHr()` (finalizes — deducts balance, links attendance) rather than Manager's `approve()` (which only forwards to `PendingHR`). `reject()` reuses the same `LeaveRequestService::reject()` Manager already calls, since it already branches correctly on the request's current stage. 6 new tests in `HrLeaveApiTest` (company-wide pending/history regardless of which manager/HR user is involved, 403 for non-HR, approve finalizes + deducts balance, reject is final, HR can't act on a still-`PendingManager` request). Full suite: 221/221 passing.
+
+This mobile-side polish pass wrapped up (test coverage, UI/UX consistency, on-device edge-case testing, all in the Flutter repo — see its `CLAUDE.md`/`report.md`) before this feature was requested, so the sequencing was: HR API built here first, then the Flutter session built and verified its HR Leave Approvals screen against it the same day, including a real end-to-end approve/reject against a live `pending_hr` request created via `tinker`.
+
+### Issues and blockers
+
+None new.
+
+### Plan for next session
+
+No specific next Laravel-side feature requested yet.
