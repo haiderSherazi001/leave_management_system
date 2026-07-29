@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\EmployeeController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\HrLeaveController;
@@ -51,5 +52,12 @@ Route::middleware('auth:sanctum')->prefix('v1')->group(function () {
         Route::get('/leave-requests/history', [HrLeaveController::class, 'history']);
         Route::post('/leave-requests/{leaveRequestId}/approve', [HrLeaveController::class, 'approve']);
         Route::post('/leave-requests/{leaveRequestId}/reject', [HrLeaveController::class, 'reject']);
+    });
+
+    Route::prefix('admin')->group(function () {
+        Route::get('/employees', [EmployeeController::class, 'index']);
+        Route::post('/employees', [EmployeeController::class, 'store']);
+        Route::put('/employees/{id}', [EmployeeController::class, 'update']);
+        Route::post('/employees/{id}/toggle-active', [EmployeeController::class, 'toggleActive']);
     });
 });
