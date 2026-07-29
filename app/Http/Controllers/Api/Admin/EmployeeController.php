@@ -29,11 +29,22 @@ final class EmployeeController extends Controller
     {
         abort_unless($request->user()->isHr(), 403);
 
+        // departments->options()/employees->managerOptions() return raw
+        // DB::table()->get() rows (every column, including the password
+        // hash on the managers side) - fine for Livewire's server-side
+        // rendering, which never serializes them, but not safe to return
+        // directly as JSON. Mapped down to only what the mobile form needs.
         return response()->json([
             'data' => [
                 'employees' => $employees->list(),
-                'departments' => $departments->options(null),
-                'managers' => $employees->managerOptions(null),
+                'departments' => array_map(
+                    fn (object $department) => ['id' => $department->id, 'name' => $department->name],
+                    $departments->options(null),
+                ),
+                'managers' => array_map(
+                    fn (object $manager) => ['id' => $manager->id, 'name' => $manager->name, 'role' => $manager->role],
+                    $employees->managerOptions(null),
+                ),
                 'roles' => array_map(fn (UserRole $role) => ['value' => $role->value, 'label' => $role->label()], UserRole::cases()),
             ],
         ]);

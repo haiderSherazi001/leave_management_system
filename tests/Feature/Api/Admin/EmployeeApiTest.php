@@ -47,6 +47,12 @@ class EmployeeApiTest extends TestCase
 
         $response->assertJsonPath('data.departments.0.name', 'Engineering');
         $this->assertNotEmpty($response->json('data.managers'));
+        // Regression guard: the underlying service methods return raw
+        // DB::table()->get() rows (every column, including the password
+        // hash) for internal Livewire use - the API must map those down to
+        // only id/name/role before they ever reach a JSON response.
+        $this->assertEqualsCanonicalizing(['id', 'name', 'role'], array_keys($response->json('data.managers')[0]));
+        $this->assertEqualsCanonicalizing(['id', 'name'], array_keys($response->json('data.departments')[0]));
         $this->assertEquals(
             ['employee', 'manager', 'hr'],
             array_column($response->json('data.roles'), 'value'),
