@@ -91,6 +91,6 @@ final class LeaveController extends Controller
             'limit' => ['sometimes', 'integer', 'min:1', 'max:20'],
         ]);
 
-        return response()->json(['data' => $service->upcoming($validated['limit'] ?? 5)]);
+        return response()->json(['data' => $service->upcoming((int) ($validated['limit'] ?? 5))]);
     }
 }

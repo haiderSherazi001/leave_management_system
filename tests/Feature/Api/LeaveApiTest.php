@@ -159,4 +159,28 @@ class LeaveApiTest extends TestCase
         $response->assertJsonFragment(['name' => 'Founders Day']);
         $response->assertJsonMissing(['name' => 'Past Holiday']);
     }
+
+    /**
+     * Regression test: an explicit ?limit=N always arrives as a string over
+     * HTTP, unlike the `?? 5` fallback default (a literal int) the test
+     * above exercises - HolidayService::upcoming(int $limit) is strictly
+     * typed, so passing the validated string straight through used to throw
+     * a TypeError the moment a real client (the mobile app) sent this
+     * query param at all.
+     */
+    public function test_upcoming_holidays_accepts_an_explicit_limit(): void
+    {
+        $user = User::factory()->create();
+        Holiday::factory()->count(3)->sequence(
+            ['date' => now()->addDays(1)->toDateString(), 'name' => 'Holiday A'],
+            ['date' => now()->addDays(2)->toDateString(), 'name' => 'Holiday B'],
+            ['date' => now()->addDays(3)->toDateString(), 'name' => 'Holiday C'],
+        )->create();
+
+        $response = $this->withHeaders($this->authHeader($user))
+            ->getJson('/api/v1/leave/holidays/upcoming?limit=2')
+            ->assertOk();
+
+        $response->assertJsonCount(2, 'data');
+    }
 }
