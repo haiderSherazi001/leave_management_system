@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\DepartmentController;
 use App\Http\Controllers\Api\Admin\EmployeeController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
@@ -59,5 +60,10 @@ Route::middleware('auth:sanctum')->prefix('v1')->group(function () {
         Route::post('/employees', [EmployeeController::class, 'store']);
         Route::put('/employees/{id}', [EmployeeController::class, 'update']);
         Route::post('/employees/{id}/toggle-active', [EmployeeController::class, 'toggleActive']);
+
+        Route::get('/departments', [DepartmentController::class, 'index']);
+        Route::post('/departments', [DepartmentController::class, 'store']);
+        Route::put('/departments/{id}', [DepartmentController::class, 'update']);
+        Route::post('/departments/{id}/toggle-active', [DepartmentController::class, 'toggleActive']);
     });
 });
