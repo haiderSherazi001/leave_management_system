@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\Admin\DepartmentController;
 use App\Http\Controllers\Api\Admin\EmployeeController;
+use App\Http\Controllers\Api\Admin\HolidayController;
 use App\Http\Controllers\Api\Admin\LeaveTypeController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
@@ -71,5 +72,10 @@ Route::middleware('auth:sanctum')->prefix('v1')->group(function () {
         Route::post('/leave-types', [LeaveTypeController::class, 'store']);
         Route::put('/leave-types/{id}', [LeaveTypeController::class, 'update']);
         Route::post('/leave-types/{id}/toggle-active', [LeaveTypeController::class, 'toggleActive']);
+
+        Route::get('/holidays', [HolidayController::class, 'index']);
+        Route::post('/holidays', [HolidayController::class, 'store']);
+        Route::put('/holidays/{id}', [HolidayController::class, 'update']);
+        Route::delete('/holidays/{id}', [HolidayController::class, 'destroy']);
     });
 });
