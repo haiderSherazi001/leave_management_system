@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Enums\UserRole;
+use App\Models\Department;
 use App\Models\User;
 use DomainException;
 use Illuminate\Support\Facades\DB;
@@ -98,6 +99,7 @@ final class EmployeeDirectoryService
         ]);
 
         $this->balances->provisionForUser($user->id, (int) date('Y', strtotime($joinedAt)));
+        $this->syncDepartmentHeadship($user->id, $role, $departmentId);
 
         return $user;
     }
@@ -126,6 +128,33 @@ final class EmployeeDirectoryService
         }
 
         DB::table('users')->where('id', $userId)->update($data);
+        $this->syncDepartmentHeadship($userId, $role, $departmentId);
+    }
+
+    /**
+     * Keeps departments.manager_id consistent with what the Employees screen
+     * itself validates (departmentConflictRule already treats a manager-role
+     * employee's department assignment as headship, blocking conflicts) - so
+     * the write path needs to actually apply it, not just validate it.
+     * Uses the Department model (not DB::table()) so DepartmentObserver's
+     * existing manager <-> department_id sync fires and stays the single
+     * source of truth for that half of the relationship.
+     */
+    private function syncDepartmentHeadship(int $userId, string $role, ?int $departmentId): void
+    {
+        $currentlyHeaded = Department::where('manager_id', $userId)->first();
+
+        if ($currentlyHeaded !== null && ($role !== UserRole::Manager->value || $currentlyHeaded->id !== $departmentId)) {
+            $currentlyHeaded->update(['manager_id' => null]);
+        }
+
+        if ($role === UserRole::Manager->value && $departmentId !== null) {
+            $department = Department::find($departmentId);
+
+            if ($department !== null && $department->manager_id !== $userId) {
+                $department->update(['manager_id' => $userId]);
+            }
+        }
     }
 
     /**
