@@ -217,6 +217,47 @@ class EmployeeApiTest extends TestCase
         $this->assertDatabaseHas('users', ['id' => $employee->id, 'is_active' => true]);
     }
 
+    public function test_creating_a_manager_into_a_headless_department_makes_them_its_head(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $department = Department::factory()->create(['manager_id' => null]);
+
+        $response = $this->withHeaders($this->authHeader($hr))
+            ->postJson('/api/v1/admin/employees', [
+                'name' => 'New Manager',
+                'email' => 'new.manager@leavedesk.test',
+                'password' => 'password123',
+                'role' => 'manager',
+                'department_id' => $department->id,
+                'joined_at' => now()->toDateString(),
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseHas('departments', ['id' => $department->id, 'manager_id' => $response->json('data.id')]);
+    }
+
+    public function test_moving_a_manager_to_a_different_department_vacates_the_one_they_used_to_head(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $manager = User::factory()->manager()->create();
+        $oldDepartment = Department::factory()->create(['manager_id' => $manager->id]);
+        $newDepartment = Department::factory()->create(['manager_id' => null]);
+
+        $this->withHeaders($this->authHeader($hr))
+            ->putJson("/api/v1/admin/employees/{$manager->id}", [
+                'name' => $manager->name,
+                'email' => $manager->email,
+                'password' => '',
+                'role' => 'manager',
+                'department_id' => $newDepartment->id,
+                'joined_at' => now()->toDateString(),
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseHas('departments', ['id' => $oldDepartment->id, 'manager_id' => null]);
+        $this->assertDatabaseHas('departments', ['id' => $newDepartment->id, 'manager_id' => $manager->id]);
+    }
+
     public function test_cannot_deactivate_the_last_active_hr_account(): void
     {
         $hr = User::factory()->hr()->create();
