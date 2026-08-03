@@ -35,6 +35,29 @@
         </x-card>
     @endif
 
+    <x-card>
+        <div class="flex flex-wrap items-end gap-3">
+            <div class="flex-1 min-w-[200px]">
+                <x-input-label for="search" value="Search" />
+                <x-text-input id="search" type="search" wire:model.live.debounce.400ms="search" placeholder="Holiday name…" class="mt-1 block w-full" />
+            </div>
+
+            <div>
+                <x-input-label for="yearFilter" value="Year" />
+                <select id="yearFilter" wire:model.live="yearFilter" class="mt-1 block w-full border-slate-300 focus:border-teal-500 focus:ring-teal-500 rounded-lg shadow-sm">
+                    <option value="">All years</option>
+                    @foreach ($years as $year)
+                        <option value="{{ $year }}">{{ $year }}</option>
+                    @endforeach
+                </select>
+            </div>
+
+            @if ($search !== '' || $yearFilter !== null)
+                <x-secondary-button wire:click="clearFilters">Clear</x-secondary-button>
+            @endif
+        </div>
+    </x-card>
+
     <x-card padding="p-0">
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-slate-200 text-sm">
@@ -65,7 +88,9 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="3" class="py-4 px-6 text-sm text-slate-500">No holidays configured yet.</td>
+                            <td colspan="3" class="py-4 px-6 text-sm text-slate-500">
+                                {{ $search !== '' || $yearFilter !== null ? 'No holidays match these filters.' : 'No holidays configured yet.' }}
+                            </td>
                         </tr>
                     @endforelse
                 </tbody>

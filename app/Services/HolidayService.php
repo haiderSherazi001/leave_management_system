@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 final class HolidayService
@@ -11,11 +12,35 @@ final class HolidayService
     /**
      * @return array<int, object>
      */
-    public function list(): array
+    public function list(?string $search = null, ?int $year = null): array
     {
         return DB::table('holidays')
+            ->when(
+                $search !== null && $search !== '',
+                fn ($query) => $query->where('name', 'like', "%{$search}%"),
+            )
+            ->when($year !== null, fn ($query) => $query->whereYear('date', $year))
             ->orderBy('date')
             ->get()
+            ->all();
+    }
+
+    /**
+     * Distinct years with at least one holiday configured, newest first, for
+     * the admin screen's year filter dropdown. Computed in PHP rather than a
+     * SQL YEAR()/strftime() extraction so it behaves identically across the
+     * MySQL (production) and SQLite (test) drivers this app runs on.
+     *
+     * @return array<int, int>
+     */
+    public function years(): array
+    {
+        return DB::table('holidays')
+            ->pluck('date')
+            ->map(fn ($date) => (int) Carbon::parse($date)->format('Y'))
+            ->unique()
+            ->sortDesc()
+            ->values()
             ->all();
     }
 

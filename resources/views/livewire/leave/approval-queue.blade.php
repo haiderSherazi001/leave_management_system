@@ -63,8 +63,31 @@
             </div>
         @endif
     @else
+        <div class="flex flex-wrap items-end gap-3 mb-4">
+            <div class="flex-1 min-w-[200px]">
+                <x-input-label for="historySearch" value="Search" />
+                <x-text-input id="historySearch" type="search" wire:model.live.debounce.400ms="historySearch" placeholder="Employee name…" class="mt-1 block w-full" />
+            </div>
+
+            <div>
+                <x-input-label for="historyLeaveType" value="Leave Type" />
+                <select id="historyLeaveType" wire:model.live="historyLeaveType" class="mt-1 block w-full border-slate-300 focus:border-teal-500 focus:ring-teal-500 rounded-lg shadow-sm">
+                    <option value="">All types</option>
+                    @foreach ($leaveTypes as $leaveType)
+                        <option value="{{ $leaveType->id }}">{{ $leaveType->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+
+            @if ($historySearch !== '' || $historyLeaveType !== null)
+                <x-secondary-button wire:click="clearHistoryFilters">Clear</x-secondary-button>
+            @endif
+        </div>
+
         @if ($history->isEmpty())
-            <p class="text-sm text-slate-500">No decided requests yet.</p>
+            <p class="text-sm text-slate-500">
+                {{ $historySearch !== '' || $historyLeaveType !== null ? 'No decided requests match these filters.' : 'No decided requests yet.' }}
+            </p>
         @else
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-slate-200 text-sm">

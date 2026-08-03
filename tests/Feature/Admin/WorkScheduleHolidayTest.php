@@ -134,4 +134,32 @@ class WorkScheduleHolidayTest extends TestCase
         Livewire::test(Holidays::class)->call('startCreate')->assertDispatched('form-opened');
         Livewire::test(Holidays::class)->call('edit', $holiday->id)->assertDispatched('form-opened');
     }
+
+    public function test_holidays_can_be_searched_by_name(): void
+    {
+        $hr = User::factory()->hr()->create();
+        Holiday::factory()->create(['name' => 'Independence Day', 'date' => '2026-08-14']);
+        Holiday::factory()->create(['name' => 'Eid', 'date' => '2026-06-16']);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Holidays::class)
+            ->set('search', 'independence')
+            ->assertSee('Independence Day')
+            ->assertDontSee('Eid');
+    }
+
+    public function test_holidays_can_be_filtered_by_year(): void
+    {
+        $hr = User::factory()->hr()->create();
+        Holiday::factory()->create(['name' => 'Last Year Holiday', 'date' => '2025-01-01']);
+        Holiday::factory()->create(['name' => 'This Year Holiday', 'date' => '2026-01-01']);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Holidays::class)
+            ->set('yearFilter', 2025)
+            ->assertSee('Last Year Holiday')
+            ->assertDontSee('This Year Holiday');
+    }
 }

@@ -886,4 +886,106 @@ class AdminManagementTest extends TestCase
         Livewire::test(LeaveTypes::class)->call('startCreate')->assertDispatched('form-opened');
         Livewire::test(LeaveTypes::class)->call('edit', $leaveType->id)->assertDispatched('form-opened');
     }
+
+    public function test_employees_can_be_searched_by_name_or_email(): void
+    {
+        $hr = User::factory()->hr()->create();
+        User::factory()->create(['name' => 'Jamie Rivera', 'email' => 'jamie@example.com']);
+        User::factory()->create(['name' => 'Someone Else', 'email' => 'findme@example.com']);
+        User::factory()->create(['name' => 'Not Matching', 'email' => 'nope@example.com']);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->set('search', 'jamie')
+            ->assertSee('Jamie Rivera')
+            ->assertDontSee('Not Matching');
+
+        Livewire::test(Employees::class)
+            ->set('search', 'findme@example.com')
+            ->assertSee('Someone Else')
+            ->assertDontSee('Not Matching');
+    }
+
+    public function test_employees_can_be_filtered_by_role_department_and_status(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $department = Department::factory()->create(['name' => 'Engineering']);
+        $manager = User::factory()->manager()->create(['name' => 'Team Lead']);
+        User::factory()->create(['name' => 'Dept Employee', 'department_id' => $department->id]);
+        User::factory()->inactive()->create(['name' => 'Inactive Employee']);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->set('roleFilter', 'manager')
+            ->assertSee('Team Lead')
+            ->assertDontSee('Dept Employee');
+
+        Livewire::test(Employees::class)
+            ->set('departmentFilter', $department->id)
+            ->assertSee('Dept Employee')
+            ->assertDontSee('Team Lead');
+
+        Livewire::test(Employees::class)
+            ->set('statusFilter', 'inactive')
+            ->assertSee('Inactive Employee')
+            ->assertDontSee('Team Lead');
+    }
+
+    public function test_clearing_employee_filters_resets_search_and_all_dropdowns(): void
+    {
+        $hr = User::factory()->hr()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->set('search', 'something')
+            ->set('roleFilter', 'manager')
+            ->set('departmentFilter', 1)
+            ->set('statusFilter', 'inactive')
+            ->call('clearFilters')
+            ->assertSet('search', '')
+            ->assertSet('roleFilter', '')
+            ->assertSet('departmentFilter', null)
+            ->assertSet('statusFilter', '');
+    }
+
+    public function test_departments_can_be_searched_and_filtered_by_status(): void
+    {
+        $hr = User::factory()->hr()->create();
+        Department::factory()->create(['name' => 'Marketing']);
+        Department::factory()->create(['name' => 'Sales', 'is_active' => false]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(Departments::class)
+            ->set('search', 'market')
+            ->assertSee('Marketing')
+            ->assertDontSee('Sales');
+
+        Livewire::test(Departments::class)
+            ->set('statusFilter', 'inactive')
+            ->assertSee('Sales')
+            ->assertDontSee('Marketing');
+    }
+
+    public function test_leave_types_can_be_searched_by_name_or_code_and_filtered_by_status(): void
+    {
+        $hr = User::factory()->hr()->create();
+        LeaveType::factory()->create(['name' => 'Sick Leave', 'code' => 'SICK']);
+        LeaveType::factory()->create(['name' => 'Annual Leave', 'code' => 'ANNUAL', 'is_active' => false]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(LeaveTypes::class)
+            ->set('search', 'SICK')
+            ->assertSee('Sick Leave')
+            ->assertDontSee('Annual Leave');
+
+        Livewire::test(LeaveTypes::class)
+            ->set('statusFilter', 'inactive')
+            ->assertSee('Annual Leave')
+            ->assertDontSee('Sick Leave');
+    }
 }

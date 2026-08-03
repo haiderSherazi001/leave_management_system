@@ -13,11 +13,24 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 
 #[Layout('layouts.app')]
 class Employees extends Component
 {
+    #[Url(as: 'q', history: true)]
+    public string $search = '';
+
+    #[Url(history: true)]
+    public string $roleFilter = '';
+
+    #[Url(as: 'department', history: true)]
+    public ?int $departmentFilter = null;
+
+    #[Url(as: 'status', history: true)]
+    public string $statusFilter = '';
+
     public ?int $editingId = null;
 
     public string $name = '';
@@ -229,11 +242,22 @@ class Employees extends Component
         }
     }
 
+    public function clearFilters(): void
+    {
+        $this->reset(['search', 'roleFilter', 'departmentFilter', 'statusFilter']);
+    }
+
     public function render(EmployeeDirectoryService $service, DepartmentService $departments): View
     {
         return view('livewire.admin.employees', [
-            'employees' => $service->list(),
+            'employees' => $service->list(
+                search: $this->search,
+                role: $this->roleFilter,
+                departmentId: $this->departmentFilter,
+                status: $this->statusFilter,
+            ),
             'departments' => $departments->options($this->departmentId),
+            'allDepartments' => $departments->list(),
             'managers' => $service->managerOptions($this->managerId, $this->role),
             'roles' => UserRole::cases(),
         ]);

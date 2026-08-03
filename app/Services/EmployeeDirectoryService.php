@@ -20,8 +20,12 @@ final class EmployeeDirectoryService
     /**
      * @return array<int, object>
      */
-    public function list(): array
-    {
+    public function list(
+        ?string $search = null,
+        ?string $role = null,
+        ?int $departmentId = null,
+        ?string $status = null,
+    ): array {
         return DB::table('users as employees')
             ->leftJoin('departments', 'departments.id', '=', 'employees.department_id')
             ->leftJoin('users as managers', 'managers.id', '=', 'employees.manager_id')
@@ -39,6 +43,16 @@ final class EmployeeDirectoryService
                 'managers.is_active as manager_is_active',
                 'employees.joined_at',
             )
+            ->when($search !== null && $search !== '', function ($query) use ($search): void {
+                $query->where(function ($query) use ($search): void {
+                    $query->where('employees.name', 'like', "%{$search}%")
+                        ->orWhere('employees.email', 'like', "%{$search}%");
+                });
+            })
+            ->when($role !== null && $role !== '', fn ($query) => $query->where('employees.role', $role))
+            ->when($departmentId !== null, fn ($query) => $query->where('employees.department_id', $departmentId))
+            ->when($status === 'active', fn ($query) => $query->where('employees.is_active', true))
+            ->when($status === 'inactive', fn ($query) => $query->where('employees.is_active', false))
             ->orderBy('employees.name')
             ->get()
             ->all();

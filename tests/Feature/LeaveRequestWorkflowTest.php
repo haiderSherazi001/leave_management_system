@@ -6,6 +6,7 @@ namespace Tests\Feature;
 
 use App\Livewire\Admin\LeaveApprovals;
 use App\Livewire\Leave\ApprovalQueue;
+use App\Livewire\Leave\MyRequests;
 use App\Livewire\Leave\RequestForm;
 use App\Models\Holiday;
 use App\Models\LeaveBalance;
@@ -1078,5 +1079,116 @@ class LeaveRequestWorkflowTest extends TestCase
             ->call('setTab', 'history')
             ->assertSee('Reset Row 01')
             ->assertDontSee('Reset Row 11');
+    }
+
+    public function test_hr_history_can_be_searched_filtered_by_leave_type_and_status(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $sick = LeaveType::factory()->create(['name' => 'Sick']);
+        $annual = LeaveType::factory()->create(['name' => 'Annual']);
+
+        $approvedSick = User::factory()->create(['name' => 'Approved Sick Person']);
+        $rejectedAnnual = User::factory()->create(['name' => 'Rejected Annual Person']);
+
+        LeaveRequest::factory()->approved()->create([
+            'user_id' => $approvedSick->id,
+            'leave_type_id' => $sick->id,
+        ]);
+
+        LeaveRequest::factory()->rejected()->create([
+            'user_id' => $rejectedAnnual->id,
+            'leave_type_id' => $annual->id,
+        ]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(LeaveApprovals::class)
+            ->call('setTab', 'history')
+            ->set('historySearch', 'Approved Sick')
+            ->assertSee('Approved Sick Person')
+            ->assertDontSee('Rejected Annual Person');
+
+        Livewire::test(LeaveApprovals::class)
+            ->call('setTab', 'history')
+            ->set('historyLeaveType', $annual->id)
+            ->assertSee('Rejected Annual Person')
+            ->assertDontSee('Approved Sick Person');
+
+        Livewire::test(LeaveApprovals::class)
+            ->call('setTab', 'history')
+            ->set('historyStatus', 'rejected')
+            ->assertSee('Rejected Annual Person')
+            ->assertDontSee('Approved Sick Person');
+    }
+
+    public function test_manager_history_can_be_searched_and_filtered_by_leave_type(): void
+    {
+        $manager = User::factory()->manager()->create();
+        $sick = LeaveType::factory()->create(['name' => 'Sick']);
+        $annual = LeaveType::factory()->create(['name' => 'Annual']);
+
+        $sickEmployee = User::factory()->create(['name' => 'Sick Employee']);
+        $annualEmployee = User::factory()->create(['name' => 'Annual Employee']);
+
+        LeaveRequest::factory()->approved()->create([
+            'user_id' => $sickEmployee->id,
+            'leave_type_id' => $sick->id,
+            'approver_id' => $manager->id,
+        ]);
+
+        LeaveRequest::factory()->approved()->create([
+            'user_id' => $annualEmployee->id,
+            'leave_type_id' => $annual->id,
+            'approver_id' => $manager->id,
+        ]);
+
+        $this->actingAs($manager);
+
+        Livewire::test(ApprovalQueue::class)
+            ->call('setTab', 'history')
+            ->set('historySearch', 'Sick Employee')
+            ->assertSee('Sick Employee')
+            ->assertDontSee('Annual Employee');
+
+        Livewire::test(ApprovalQueue::class)
+            ->call('setTab', 'history')
+            ->set('historyLeaveType', $annual->id)
+            ->assertSee('Annual Employee')
+            ->assertDontSee('Sick Employee');
+    }
+
+    public function test_my_requests_can_be_filtered_by_leave_type_and_status(): void
+    {
+        // Distinguished by decision_note (unique per row) rather than leave
+        // type name, since the leave-type filter <select> always lists every
+        // type as an option regardless of which one is currently selected —
+        // asserting on the type name itself would always "see" both.
+        $employee = User::factory()->create();
+        $sick = LeaveType::factory()->create(['name' => 'Sick']);
+        $annual = LeaveType::factory()->create(['name' => 'Annual']);
+
+        LeaveRequest::factory()->approved()->create([
+            'user_id' => $employee->id,
+            'leave_type_id' => $sick->id,
+            'decision_note' => 'Sick request note',
+        ]);
+
+        LeaveRequest::factory()->rejected()->create([
+            'user_id' => $employee->id,
+            'leave_type_id' => $annual->id,
+            'decision_note' => 'Annual request note',
+        ]);
+
+        $this->actingAs($employee);
+
+        Livewire::test(MyRequests::class)
+            ->set('leaveTypeFilter', $annual->id)
+            ->assertSee('Annual request note')
+            ->assertDontSee('Sick request note');
+
+        Livewire::test(MyRequests::class)
+            ->set('statusFilter', 'rejected')
+            ->assertSee('Annual request note')
+            ->assertDontSee('Sick request note');
     }
 }

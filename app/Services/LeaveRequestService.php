@@ -303,13 +303,21 @@ final class LeaveRequestService
     /**
      * @return array<int, object>
      */
-    public function forEmployee(int $userId): array
-    {
+    public function forEmployee(
+        int $userId,
+        ?int $leaveTypeId = null,
+        ?string $status = null,
+    ): array {
         return DB::table('leave_requests')
             ->join('leave_types', 'leave_types.id', '=', 'leave_requests.leave_type_id')
             ->leftJoin('users as approvers', 'approvers.id', '=', 'leave_requests.approver_id')
             ->leftJoin('users as hr_approvers', 'hr_approvers.id', '=', 'leave_requests.hr_approver_id')
             ->where('leave_requests.user_id', $userId)
+            ->when($leaveTypeId !== null, fn ($query) => $query->where('leave_requests.leave_type_id', $leaveTypeId))
+            ->when(
+                $status !== null && $status !== '' && LeaveRequestStatus::tryFrom($status) !== null,
+                fn ($query) => $query->where('leave_requests.status', $status),
+            )
             ->select(
                 'leave_requests.id',
                 'leave_types.name as leave_type_name',
@@ -377,14 +385,23 @@ final class LeaveRequestService
      * later decides), so a manager can always see what happened to a
      * request after it left their hands.
      */
-    public function historyForApprover(int $managerId, int $perPage = 10): LengthAwarePaginator
-    {
+    public function historyForApprover(
+        int $managerId,
+        int $perPage = 10,
+        ?string $search = null,
+        ?int $leaveTypeId = null,
+    ): LengthAwarePaginator {
         return DB::table('leave_requests')
             ->join('users', 'users.id', '=', 'leave_requests.user_id')
             ->join('leave_types', 'leave_types.id', '=', 'leave_requests.leave_type_id')
             ->leftJoin('users as hr_approvers', 'hr_approvers.id', '=', 'leave_requests.hr_approver_id')
             ->where('leave_requests.approver_id', $managerId)
             ->whereIn('leave_requests.status', [LeaveRequestStatus::Approved->value, LeaveRequestStatus::Rejected->value])
+            ->when(
+                $search !== null && $search !== '',
+                fn ($query) => $query->where('users.name', 'like', "%{$search}%"),
+            )
+            ->when($leaveTypeId !== null, fn ($query) => $query->where('leave_requests.leave_type_id', $leaveTypeId))
             ->select(
                 'leave_requests.id',
                 'users.name as employee_name',
@@ -474,14 +491,27 @@ final class LeaveRequestService
      * pendingForHr() already being company-wide rather than scoped to a
      * specific HR user's own actions.
      */
-    public function historyForHr(int $perPage = 10): LengthAwarePaginator
-    {
+    public function historyForHr(
+        int $perPage = 10,
+        ?string $search = null,
+        ?int $leaveTypeId = null,
+        ?string $status = null,
+    ): LengthAwarePaginator {
         return DB::table('leave_requests')
             ->join('users', 'users.id', '=', 'leave_requests.user_id')
             ->join('leave_types', 'leave_types.id', '=', 'leave_requests.leave_type_id')
             ->leftJoin('users as managers', 'managers.id', '=', 'leave_requests.approver_id')
             ->leftJoin('users as hr_approvers', 'hr_approvers.id', '=', 'leave_requests.hr_approver_id')
             ->whereIn('leave_requests.status', [LeaveRequestStatus::Approved->value, LeaveRequestStatus::Rejected->value])
+            ->when(
+                $search !== null && $search !== '',
+                fn ($query) => $query->where('users.name', 'like', "%{$search}%"),
+            )
+            ->when($leaveTypeId !== null, fn ($query) => $query->where('leave_requests.leave_type_id', $leaveTypeId))
+            ->when(
+                in_array($status, [LeaveRequestStatus::Approved->value, LeaveRequestStatus::Rejected->value], true),
+                fn ($query) => $query->where('leave_requests.status', $status),
+            )
             ->select(
                 'leave_requests.id',
                 'users.name as employee_name',

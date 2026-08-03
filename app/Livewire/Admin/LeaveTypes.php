@@ -10,11 +10,18 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 
 #[Layout('layouts.app')]
 class LeaveTypes extends Component
 {
+    #[Url(as: 'q', history: true)]
+    public string $search = '';
+
+    #[Url(as: 'status', history: true)]
+    public string $statusFilter = '';
+
     public ?int $editingId = null;
 
     public string $name = '';
@@ -122,10 +129,15 @@ class LeaveTypes extends Component
         $service->setActive($leaveTypeId, ! (bool) $leaveType->is_active);
     }
 
+    public function clearFilters(): void
+    {
+        $this->reset(['search', 'statusFilter']);
+    }
+
     public function render(LeaveTypeService $service): View
     {
         return view('livewire.admin.leave-types', [
-            'leaveTypes' => $service->list(),
+            'leaveTypes' => $service->list(search: $this->search, status: $this->statusFilter),
         ]);
     }
 }

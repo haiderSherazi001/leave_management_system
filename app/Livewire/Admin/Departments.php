@@ -11,11 +11,18 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 
 #[Layout('layouts.app')]
 class Departments extends Component
 {
+    #[Url(as: 'q', history: true)]
+    public string $search = '';
+
+    #[Url(as: 'status', history: true)]
+    public string $statusFilter = '';
+
     public ?int $editingId = null;
 
     public string $name = '';
@@ -110,10 +117,15 @@ class Departments extends Component
         $service->setActive($departmentId, ! (bool) $department->is_active);
     }
 
+    public function clearFilters(): void
+    {
+        $this->reset(['search', 'statusFilter']);
+    }
+
     public function render(DepartmentService $service, EmployeeDirectoryService $employees): View
     {
         return view('livewire.admin.departments', [
-            'departments' => $service->list(),
+            'departments' => $service->list(search: $this->search, status: $this->statusFilter),
             'managers' => $employees->managerOptions($this->managerId),
         ]);
     }

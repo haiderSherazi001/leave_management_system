@@ -10,11 +10,18 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 
 #[Layout('layouts.app')]
 class Holidays extends Component
 {
+    #[Url(as: 'q', history: true)]
+    public string $search = '';
+
+    #[Url(as: 'year', history: true)]
+    public ?int $yearFilter = null;
+
     public ?int $editingId = null;
 
     public string $date = '';
@@ -85,10 +92,16 @@ class Holidays extends Component
         $service->delete($holidayId);
     }
 
+    public function clearFilters(): void
+    {
+        $this->reset(['search', 'yearFilter']);
+    }
+
     public function render(HolidayService $service): View
     {
         return view('livewire.admin.holidays', [
-            'holidays' => $service->list(),
+            'holidays' => $service->list(search: $this->search, year: $this->yearFilter),
+            'years' => $service->years(),
         ]);
     }
 }

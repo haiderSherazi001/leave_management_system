@@ -12,7 +12,7 @@ final class DepartmentService
     /**
      * @return array<int, object>
      */
-    public function list(): array
+    public function list(?string $search = null, ?string $status = null): array
     {
         return DB::table('departments')
             ->leftJoin('users as managers', 'managers.id', '=', 'departments.manager_id')
@@ -24,6 +24,12 @@ final class DepartmentService
                 'managers.is_active as manager_is_active',
                 'departments.is_active',
             )
+            ->when(
+                $search !== null && $search !== '',
+                fn ($query) => $query->where('departments.name', 'like', "%{$search}%"),
+            )
+            ->when($status === 'active', fn ($query) => $query->where('departments.is_active', true))
+            ->when($status === 'inactive', fn ($query) => $query->where('departments.is_active', false))
             ->orderBy('departments.name')
             ->get()
             ->all();

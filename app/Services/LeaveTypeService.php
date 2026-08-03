@@ -15,9 +15,17 @@ final class LeaveTypeService
     /**
      * @return array<int, object>
      */
-    public function list(): array
+    public function list(?string $search = null, ?string $status = null): array
     {
         return DB::table('leave_types')
+            ->when($search !== null && $search !== '', function ($query) use ($search): void {
+                $query->where(function ($query) use ($search): void {
+                    $query->where('name', 'like', "%{$search}%")
+                        ->orWhere('code', 'like', "%{$search}%");
+                });
+            })
+            ->when($status === 'active', fn ($query) => $query->where('is_active', true))
+            ->when($status === 'inactive', fn ($query) => $query->where('is_active', false))
             ->orderBy('name')
             ->get()
             ->all();

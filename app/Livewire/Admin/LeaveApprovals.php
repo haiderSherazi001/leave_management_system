@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Livewire\Admin;
 
 use App\Services\LeaveRequestService;
+use App\Services\LeaveTypeService;
 use DomainException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\View\View;
@@ -29,6 +30,15 @@ class LeaveApprovals extends Component
     #[Url]
     public string $tab = 'pending';
 
+    #[Url(as: 'q', history: true)]
+    public string $historySearch = '';
+
+    #[Url(as: 'type', history: true)]
+    public ?int $historyLeaveType = null;
+
+    #[Url(as: 'status', history: true)]
+    public string $historyStatus = '';
+
     public function mount(): void
     {
         abort_unless(Auth::user()->isHr(), 403);
@@ -41,6 +51,27 @@ class LeaveApprovals extends Component
     public function setTab(string $tab): void
     {
         $this->tab = in_array($tab, self::TABS, true) ? $tab : 'pending';
+        $this->resetPage();
+    }
+
+    public function updatedHistorySearch(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedHistoryLeaveType(): void
+    {
+        $this->resetPage();
+    }
+
+    public function updatedHistoryStatus(): void
+    {
+        $this->resetPage();
+    }
+
+    public function clearHistoryFilters(): void
+    {
+        $this->reset(['historySearch', 'historyLeaveType', 'historyStatus']);
         $this->resetPage();
     }
 
@@ -75,12 +106,17 @@ class LeaveApprovals extends Component
         unset($this->notes[$leaveRequestId]);
     }
 
-    public function render(LeaveRequestService $service): View
+    public function render(LeaveRequestService $service, LeaveTypeService $leaveTypes): View
     {
         return view('livewire.admin.leave-approvals', [
             'requests' => $this->tab === 'pending' ? $service->pendingForHr() : [],
             'awaitingManager' => $this->tab === 'awaiting_manager' ? $service->pendingManagerCompanyWide() : [],
-            'history' => $this->tab === 'history' ? $service->historyForHr() : null,
+            'history' => $this->tab === 'history' ? $service->historyForHr(
+                search: $this->historySearch,
+                leaveTypeId: $this->historyLeaveType,
+                status: $this->historyStatus,
+            ) : null,
+            'leaveTypes' => $leaveTypes->list(),
         ]);
     }
 }
