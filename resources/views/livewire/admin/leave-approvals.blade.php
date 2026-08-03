@@ -7,6 +7,11 @@
                 {{ $tab === 'pending' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500 hover:text-slate-700' }}">
             Pending
         </button>
+        <button type="button" wire:click="setTab('awaiting_manager')"
+            class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition
+                {{ $tab === 'awaiting_manager' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500 hover:text-slate-700' }}">
+            Awaiting Manager
+        </button>
         <button type="button" wire:click="setTab('history')"
             class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition
                 {{ $tab === 'history' ? 'border-teal-600 text-teal-700' : 'border-transparent text-slate-500 hover:text-slate-700' }}">
@@ -64,6 +69,34 @@
                             <x-danger-button wire:click="reject({{ $request->id }})">
                                 Reject
                             </x-danger-button>
+                        </div>
+                    </div>
+                @endforeach
+            </div>
+        @endif
+    @elseif ($tab === 'awaiting_manager')
+        <h3 class="text-lg font-semibold text-slate-900 mb-1">Awaiting Manager Approval</h3>
+        <p class="text-sm text-slate-500 mb-4">Company-wide, view-only — these haven't reached HR yet and are waiting on the employee's own manager to act.</p>
+
+        @if (count($awaitingManager) === 0)
+            <p class="text-sm text-slate-500">No leave requests are awaiting manager approval.</p>
+        @else
+            <div class="space-y-4">
+                @foreach ($awaitingManager as $request)
+                    <div class="border border-slate-200 rounded-lg p-4" wire:key="awaiting-manager-{{ $request->id }}">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="font-medium text-slate-900">{{ $request->employee_name }}</p>
+                                <p class="text-sm text-slate-500">
+                                    {{ $request->leave_type_name }} &middot;
+                                    {{ \Illuminate\Support\Carbon::parse($request->start_date)->format('M j, Y') }}
+                                    &ndash;
+                                    {{ \Illuminate\Support\Carbon::parse($request->end_date)->format('M j, Y') }}
+                                    ({{ $request->total_days }} day{{ $request->total_days == 1 ? '' : 's' }})
+                                </p>
+                                <p class="text-sm text-slate-600 mt-1">{{ $request->reason }}</p>
+                            </div>
+                            <x-badge color="amber">Waiting on {{ $request->pending_manager_name ?? 'unassigned manager' }}</x-badge>
                         </div>
                     </div>
                 @endforeach

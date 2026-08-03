@@ -403,6 +403,40 @@ final class LeaveRequestService
     }
 
     /**
+     * Company-wide PendingManager requests — read-only visibility for HR
+     * into requests still waiting on an employee's own manager, so a
+     * dashboard count of "pending" doesn't point at a queue HR has no way
+     * to actually locate. HR can't act on these (only the assigned
+     * manager can), so this includes who that manager is.
+     *
+     * @return array<int, object>
+     */
+    public function pendingManagerCompanyWide(): array
+    {
+        return DB::table('leave_requests')
+            ->join('users', 'users.id', '=', 'leave_requests.user_id')
+            ->leftJoin('departments', 'departments.id', '=', 'users.department_id')
+            ->leftJoin('users as direct_managers', 'direct_managers.id', '=', 'users.manager_id')
+            ->leftJoin('users as department_heads', 'department_heads.id', '=', 'departments.manager_id')
+            ->join('leave_types', 'leave_types.id', '=', 'leave_requests.leave_type_id')
+            ->where('leave_requests.status', LeaveRequestStatus::PendingManager->value)
+            ->select(
+                'leave_requests.id',
+                'users.name as employee_name',
+                'leave_types.name as leave_type_name',
+                'leave_requests.start_date',
+                'leave_requests.end_date',
+                'leave_requests.is_half_day',
+                'leave_requests.total_days',
+                'leave_requests.reason',
+                DB::raw('COALESCE(direct_managers.name, department_heads.name) as pending_manager_name'),
+            )
+            ->orderBy('leave_requests.start_date')
+            ->get()
+            ->all();
+    }
+
+    /**
      * Company-wide PendingHR requests — every request a manager has
      * already forwarded and that now needs HR's final sign-off. Unlike
      * pendingForApprover(), this isn't scoped to any one manager's team:

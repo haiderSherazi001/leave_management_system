@@ -115,7 +115,8 @@ class DashboardTest extends TestCase
         $this->assertSame(2, $stats['presentToday']);
         $this->assertSame(1, $stats['lateToday']);
         $this->assertSame(1, $stats['onLeaveToday']);
-        $this->assertSame(2, $stats['pendingRequests']);
+        $this->assertSame(1, $stats['pendingManager']);
+        $this->assertSame(1, $stats['pendingHr']);
 
         $hr = User::factory()->hr()->create();
         $this->actingAs($hr);
@@ -125,6 +126,7 @@ class DashboardTest extends TestCase
             ->assertSee('2')
             ->assertSee('Late Check-ins Today')
             ->assertSee('On Leave Today')
-            ->assertSee('Pending Requests');
+            ->assertSee('Awaiting Manager')
+            ->assertSee('Awaiting HR');
     }
 }

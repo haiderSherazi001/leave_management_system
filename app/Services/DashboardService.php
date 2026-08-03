@@ -16,7 +16,7 @@ final class DashboardService
      * users across every role — check-in and leave are open to everyone,
      * so "company-wide" means the whole staff, not just employees.
      *
-     * @return array{presentToday: int, lateToday: int, onLeaveToday: int, pendingRequests: int}
+     * @return array{presentToday: int, lateToday: int, onLeaveToday: int, pendingManager: int, pendingHr: int}
      */
     public function attendanceOverview(): array
     {
@@ -47,18 +47,20 @@ final class DashboardService
             ->count();
 
         // Company-wide, unlike LeaveRequestService::pendingForApprover()
-        // which is scoped to a single manager's team — counts every request
-        // still awaiting a decision at either approval stage (manager or HR).
-        $pendingRequests = LeaveRequest::whereIn('status', [
-            LeaveRequestStatus::PendingManager,
-            LeaveRequestStatus::PendingHR,
-        ])->count();
+        // which is scoped to a single manager's team. Split by stage
+        // (rather than one combined count) so HR can tell at a glance
+        // whether a pending request is sitting with a manager or with
+        // HR itself — a single number gave no way to locate which queue
+        // (if any) HR could actually act on.
+        $pendingManager = LeaveRequest::where('status', LeaveRequestStatus::PendingManager)->count();
+        $pendingHr = LeaveRequest::where('status', LeaveRequestStatus::PendingHR)->count();
 
         return [
             'presentToday' => $statusCounts[AttendanceStatus::Present->value] ?? 0,
             'lateToday' => $statusCounts[AttendanceStatus::Late->value] ?? 0,
             'onLeaveToday' => $onLeaveToday,
-            'pendingRequests' => $pendingRequests,
+            'pendingManager' => $pendingManager,
+            'pendingHr' => $pendingHr,
         ];
     }
 }

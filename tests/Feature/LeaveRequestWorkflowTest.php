@@ -966,6 +966,39 @@ class LeaveRequestWorkflowTest extends TestCase
             ->assertSee('HR Decided Case');
     }
 
+    public function test_hr_can_view_company_wide_pending_manager_requests_read_only(): void
+    {
+        $manager = User::factory()->manager()->create(['name' => 'Direct Manager']);
+        $hr = User::factory()->hr()->create();
+        $employee = User::factory()->create(['name' => 'Still With Manager', 'manager_id' => $manager->id]);
+        $leaveType = LeaveType::factory()->create();
+
+        $leaveRequest = LeaveRequest::factory()->create([
+            'user_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'status' => 'pending_manager',
+        ]);
+
+        $this->actingAs($hr);
+
+        Livewire::test(LeaveApprovals::class)
+            ->call('setTab', 'awaiting_manager')
+            ->assertSee('Still With Manager')
+            ->assertSee('Direct Manager')
+            // Read-only — HR has no approve/reject action available on this tab.
+            ->assertDontSee('Approve')
+            ->assertDontSee('Reject')
+            ->assertSuccessful();
+
+        // A raw call('approve', ...) must still be rejected server-side even
+        // though the button isn't rendered, since it's still at the manager
+        // stage — see test_hr_cannot_approve_or_reject_a_request_still_pending_manager_approval.
+        $this->assertDatabaseHas('leave_requests', [
+            'id' => $leaveRequest->id,
+            'status' => 'pending_manager',
+        ]);
+    }
+
     public function test_manager_history_is_paginated(): void
     {
         $manager = User::factory()->manager()->create();

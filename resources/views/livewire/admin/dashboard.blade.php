@@ -17,10 +17,19 @@
             <p class="mt-1 text-3xl font-bold text-slate-900">{{ $stats['onLeaveToday'] }}</p>
         </x-card>
 
-        <x-card>
-            <p class="text-sm font-medium text-slate-500">Pending Requests</p>
-            <p class="mt-1 text-3xl font-bold text-slate-900">{{ $stats['pendingRequests'] }}</p>
-        </x-card>
+        <a href="{{ route('admin.leave-approvals', ['tab' => 'awaiting_manager']) }}" wire:navigate>
+            <x-card class="hover:border-teal-300 transition">
+                <p class="text-sm font-medium text-slate-500">Awaiting Manager</p>
+                <p class="mt-1 text-3xl font-bold text-slate-900">{{ $stats['pendingManager'] }}</p>
+            </x-card>
+        </a>
+
+        <a href="{{ route('admin.leave-approvals', ['tab' => 'pending']) }}" wire:navigate>
+            <x-card class="hover:border-teal-300 transition">
+                <p class="text-sm font-medium text-slate-500">Awaiting HR</p>
+                <p class="mt-1 text-3xl font-bold text-slate-900">{{ $stats['pendingHr'] }}</p>
+            </x-card>
+        </a>
     </div>
 
     <x-card>
