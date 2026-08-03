@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\Admin\DepartmentController;
 use App\Http\Controllers\Api\Admin\EmployeeController;
 use App\Http\Controllers\Api\Admin\HolidayController;
 use App\Http\Controllers\Api\Admin\LeaveTypeController;
+use App\Http\Controllers\Api\Admin\WorkScheduleController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\HrLeaveController;
@@ -77,5 +78,8 @@ Route::middleware('auth:sanctum')->prefix('v1')->group(function () {
         Route::post('/holidays', [HolidayController::class, 'store']);
         Route::put('/holidays/{id}', [HolidayController::class, 'update']);
         Route::delete('/holidays/{id}', [HolidayController::class, 'destroy']);
+
+        Route::get('/work-schedule', [WorkScheduleController::class, 'show']);
+        Route::put('/work-schedule', [WorkScheduleController::class, 'update']);
     });
 });
