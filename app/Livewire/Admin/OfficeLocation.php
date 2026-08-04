@@ -13,11 +13,18 @@ use Livewire\Component;
 #[Layout('layouts.app')]
 class OfficeLocation extends Component
 {
-    public float $latitude;
+    public ?float $latitude = null;
 
-    public float $longitude;
+    public ?float $longitude = null;
 
-    public int $radiusMeters;
+    /**
+     * A generic starting suggestion, not tied to any real place - unlike
+     * latitude/longitude, there's no sense in which a radius is "somebody
+     * else's office", so defaulting it is harmless. HR still has to
+     * explicitly place the pin (or use their current location) before this
+     * screen represents a real, saveable location.
+     */
+    public int $radiusMeters = 100;
 
     public ?string $label = null;
 
@@ -29,10 +36,12 @@ class OfficeLocation extends Component
 
         $location = $service->get();
 
-        $this->latitude = $location->latitude ?? (float) config('attendance.office_latitude');
-        $this->longitude = $location->longitude ?? (float) config('attendance.office_longitude');
-        $this->radiusMeters = $location->radius_meters ?? (int) config('attendance.max_checkin_distance_meters');
-        $this->label = $location->label ?? null;
+        if ($location !== null) {
+            $this->latitude = $location->latitude;
+            $this->longitude = $location->longitude;
+            $this->radiusMeters = $location->radius_meters;
+            $this->label = $location->label;
+        }
     }
 
     /**

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use DomainException;
+
 final class GeoLocationService
 {
     private const EARTH_RADIUS_METERS = 6371000.0;
@@ -11,6 +13,20 @@ final class GeoLocationService
     public function __construct(
         private readonly OfficeLocationService $officeLocation,
     ) {}
+
+    /**
+     * @throws DomainException if HR hasn't configured an office location yet
+     */
+    public function office(): object
+    {
+        $office = $this->officeLocation->get();
+
+        if ($office === null) {
+            throw new DomainException('Office location has not been configured yet. Please contact HR.');
+        }
+
+        return $office;
+    }
 
     /**
      * Great-circle distance between two coordinates, via the Haversine
@@ -34,21 +50,14 @@ final class GeoLocationService
     }
 
     /**
-     * HR-configured office_location row wins when one exists; falls back to
-     * the OFFICE_LATITUDE/OFFICE_LONGITUDE/MAX_CHECKIN_DISTANCE_METERS .env
-     * defaults otherwise, so nothing breaks before HR has ever visited the
-     * "Office Location" admin screen.
+     * @throws DomainException if HR hasn't configured an office location yet
      */
     public function isWithinOfficeRadius(float $latitude, float $longitude): bool
     {
-        $office = $this->officeLocation->get();
+        $office = $this->office();
 
-        $officeLat = $office->latitude ?? (float) config('attendance.office_latitude');
-        $officeLon = $office->longitude ?? (float) config('attendance.office_longitude');
-        $radius = $office->radius_meters ?? (int) config('attendance.max_checkin_distance_meters');
+        $distance = $this->calculateDistanceInMeters($latitude, $longitude, $office->latitude, $office->longitude);
 
-        $distance = $this->calculateDistanceInMeters($latitude, $longitude, $officeLat, $officeLon);
-
-        return $distance <= $radius;
+        return $distance <= $office->radius_meters;
     }
 }

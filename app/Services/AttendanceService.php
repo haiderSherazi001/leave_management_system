@@ -32,11 +32,16 @@ final class AttendanceService
             throw new DomainException('You have already checked in today.');
         }
 
+        // office() throws a DomainException itself ("has not been configured
+        // yet") if HR hasn't set one up - same as any other precondition
+        // failure in this method, nothing extra to catch here.
+        $office = $this->geoLocation->office();
+
         if (! $this->geoLocation->isWithinOfficeRadius($latitude, $longitude)) {
             throw ValidationException::withMessages([
                 'location' => sprintf(
                     'You must be within %d meters of the office to check in.',
-                    config('attendance.max_checkin_distance_meters'),
+                    $office->radius_meters,
                 ),
             ]);
         }

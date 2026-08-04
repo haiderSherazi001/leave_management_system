@@ -21,6 +21,31 @@ class AttendanceAutoLinkTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Seeds a real office_location row (idempotent - only the first call per
+     * test actually inserts) since check-in now requires one configured,
+     * rather than falling back to an env default.
+     *
+     * @return array{0: float, 1: float}
+     */
+    private function officeCoordinates(): array
+    {
+        $lat = 31.411751;
+        $lon = 73.117245;
+
+        if (! DB::table('office_location')->exists()) {
+            DB::table('office_location')->insert([
+                'latitude' => $lat,
+                'longitude' => $lon,
+                'radius_meters' => 100,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        return [$lat, $lon];
+    }
+
     public function test_approving_leave_creates_on_leave_attendance_only_for_working_days(): void
     {
         WorkSchedule::factory()->create(['working_days' => [1, 2, 3, 4, 5]]);
@@ -182,7 +207,7 @@ class AttendanceAutoLinkTest extends TestCase
         $service = $this->app->make(AttendanceService::class);
 
         $service->markOnLeave($employee->id, '2026-08-10');
-        $service->checkIn($employee->id, '2026-08-10', (float) config('attendance.office_latitude'), (float) config('attendance.office_longitude'));
+        $service->checkIn($employee->id, '2026-08-10', ...$this->officeCoordinates());
 
         $record = DB::table('attendances')->where('user_id', $employee->id)->where('date', '2026-08-10')->first();
 
@@ -203,7 +228,7 @@ class AttendanceAutoLinkTest extends TestCase
         $service = $this->app->make(AttendanceService::class);
 
         $service->markOnLeave($employee->id, '2026-08-10');
-        $service->checkIn($employee->id, '2026-08-10', (float) config('attendance.office_latitude'), (float) config('attendance.office_longitude'));
+        $service->checkIn($employee->id, '2026-08-10', ...$this->officeCoordinates());
         $service->checkOut($employee->id, '2026-08-10');
 
         $record = DB::table('attendances')->where('user_id', $employee->id)->where('date', '2026-08-10')->first();

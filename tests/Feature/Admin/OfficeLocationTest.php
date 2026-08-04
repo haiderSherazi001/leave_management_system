@@ -31,15 +31,28 @@ class OfficeLocationTest extends TestCase
         }
     }
 
-    public function test_mount_pre_fills_from_the_env_default_when_nothing_is_configured_yet(): void
+    public function test_mount_leaves_coordinates_blank_when_nothing_is_configured_yet(): void
     {
         $hr = User::factory()->hr()->create();
         $this->actingAs($hr);
 
         Livewire::test(OfficeLocation::class)
-            ->assertSet('latitude', (float) config('attendance.office_latitude'))
-            ->assertSet('longitude', (float) config('attendance.office_longitude'))
-            ->assertSet('radiusMeters', (int) config('attendance.max_checkin_distance_meters'));
+            ->assertSet('latitude', null)
+            ->assertSet('longitude', null)
+            ->assertSet('radiusMeters', 100)
+            ->assertSee('No office location has been set yet');
+    }
+
+    public function test_the_not_configured_notice_disappears_once_a_location_is_saved(): void
+    {
+        $hr = User::factory()->hr()->create();
+        $this->actingAs($hr);
+
+        Livewire::test(OfficeLocation::class)
+            ->set('latitude', 31.5204)
+            ->set('longitude', 74.3587)
+            ->call('save')
+            ->assertDontSee('No office location has been set yet');
     }
 
     public function test_hr_can_save_a_new_office_location(): void

@@ -5,9 +5,15 @@
         <x-alert-banner type="success">{{ $successMessage }}</x-alert-banner>
     @endif
 
+    @if ($latitude === null || $longitude === null)
+        <div class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            No office location has been set yet — employees cannot check in until one is saved here. Click anywhere on the map, drag the pin once placed, or use "Use My Current Location" below.
+        </div>
+    @endif
+
     <x-card>
         <p class="text-sm text-slate-500 mb-4">
-            Employees must check in from within this radius (shown as the shaded circle). Drag the pin, click anywhere on the map, or use your current location to set it.
+            Employees must check in from within this radius (shown as the shaded circle). Click anywhere on the map to place the pin, drag it afterward, or use your current location to set it.
         </p>
 
         <div

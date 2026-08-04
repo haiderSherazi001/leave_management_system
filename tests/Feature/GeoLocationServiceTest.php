@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Services\GeoLocationService;
+use DomainException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -26,7 +27,7 @@ class GeoLocationServiceTest extends TestCase
         $this->assertTrue($service->isWithinOfficeRadius($officeLat, $officeLon));
     }
 
-    public function test_a_point_fifty_meters_away_is_within_the_default_radius(): void
+    public function test_a_point_fifty_meters_away_is_within_the_configured_radius(): void
     {
         $service = $this->app->make(GeoLocationService::class);
         [$officeLat, $officeLon] = $this->officeCoordinates();
@@ -38,7 +39,7 @@ class GeoLocationServiceTest extends TestCase
         $this->assertTrue($service->isWithinOfficeRadius($lat, $lon));
     }
 
-    public function test_a_point_one_kilometer_away_is_outside_the_default_radius(): void
+    public function test_a_point_one_kilometer_away_is_outside_the_configured_radius(): void
     {
         $service = $this->app->make(GeoLocationService::class);
         [$officeLat, $officeLon] = $this->officeCoordinates();
@@ -50,34 +51,42 @@ class GeoLocationServiceTest extends TestCase
         $this->assertFalse($service->isWithinOfficeRadius($lat, $lon));
     }
 
-    public function test_an_hr_configured_office_location_overrides_the_env_default(): void
+    /**
+     * There's deliberately no .env fallback - HR must configure a real
+     * office location via the admin screen before check-in can work at all.
+     */
+    public function test_it_throws_when_no_office_location_has_been_configured_yet(): void
     {
         $service = $this->app->make(GeoLocationService::class);
-        [$configuredLat, $configuredLon] = $this->officeCoordinates();
 
-        // A DB-configured office 1000m north of the .env default - a point
-        // near the .env default should now read as *outside* the radius,
-        // proving the DB row actually won, not the fallback.
-        $deltaLatDegrees = rad2deg(1000 / self::EARTH_RADIUS_METERS);
-        DB::table('office_location')->insert([
-            'latitude' => $configuredLat + $deltaLatDegrees,
-            'longitude' => $configuredLon,
-            'radius_meters' => 100,
-            'label' => 'Head Office',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        $this->expectException(DomainException::class);
+        $this->expectExceptionMessage('Office location has not been configured yet. Please contact HR.');
 
-        $this->assertFalse($service->isWithinOfficeRadius($configuredLat, $configuredLon));
-        $this->assertTrue($service->isWithinOfficeRadius($configuredLat + $deltaLatDegrees, $configuredLon));
+        $service->isWithinOfficeRadius(31.5, 74.3);
     }
 
     /**
+     * Seeds a real office_location row (idempotent - only the first call per
+     * test actually inserts).
+     *
      * @return array{0: float, 1: float}
      */
     private function officeCoordinates(): array
     {
-        return [(float) config('attendance.office_latitude'), (float) config('attendance.office_longitude')];
+        $lat = 31.411751;
+        $lon = 73.117245;
+
+        if (! DB::table('office_location')->exists()) {
+            DB::table('office_location')->insert([
+                'latitude' => $lat,
+                'longitude' => $lon,
+                'radius_meters' => 100,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        return [$lat, $lon];
     }
 
     /**

@@ -12,6 +12,7 @@ use App\Models\WorkSchedule;
 use App\Services\AttendanceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -27,11 +28,28 @@ class AttendanceCheckInTest extends TestCase
     }
 
     /**
+     * Seeds a real office_location row (idempotent - only the first call per
+     * test actually inserts) since check-in now requires one configured,
+     * rather than falling back to an env default.
+     *
      * @return array{0: float, 1: float}
      */
     private function officeCoordinates(): array
     {
-        return [(float) config('attendance.office_latitude'), (float) config('attendance.office_longitude')];
+        $lat = 31.411751;
+        $lon = 73.117245;
+
+        if (! DB::table('office_location')->exists()) {
+            DB::table('office_location')->insert([
+                'latitude' => $lat,
+                'longitude' => $lon,
+                'radius_meters' => 100,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        return [$lat, $lon];
     }
 
     public function test_attendance_page_is_accessible_to_any_authenticated_role(): void
@@ -69,6 +87,20 @@ class AttendanceCheckInTest extends TestCase
             ->assertSee('Check In')
             ->assertSee('Check Out')
             ->assertDontSee('no check-in is required');
+    }
+
+    public function test_employee_cannot_check_in_until_hr_has_configured_an_office_location(): void
+    {
+        $employee = User::factory()->create();
+        $this->actingAs($employee);
+
+        // Deliberately not calling officeCoordinates() - no office_location
+        // row exists at all yet, simulating a fresh install.
+        Livewire::test(CheckIn::class)
+            ->call('checkIn', 31.5204, 74.3587)
+            ->assertSet('errorMessage', 'Office location has not been configured yet. Please contact HR.');
+
+        $this->assertDatabaseCount('attendances', 0);
     }
 
     public function test_employee_can_check_in(): void
