@@ -8,6 +8,10 @@ final class GeoLocationService
 {
     private const EARTH_RADIUS_METERS = 6371000.0;
 
+    public function __construct(
+        private readonly OfficeLocationService $officeLocation,
+    ) {}
+
     /**
      * Great-circle distance between two coordinates, via the Haversine
      * formula. Accurate enough for office-radius checks at this scale —
@@ -29,15 +33,22 @@ final class GeoLocationService
         return self::EARTH_RADIUS_METERS * $c;
     }
 
+    /**
+     * HR-configured office_location row wins when one exists; falls back to
+     * the OFFICE_LATITUDE/OFFICE_LONGITUDE/MAX_CHECKIN_DISTANCE_METERS .env
+     * defaults otherwise, so nothing breaks before HR has ever visited the
+     * "Office Location" admin screen.
+     */
     public function isWithinOfficeRadius(float $latitude, float $longitude): bool
     {
-        $distance = $this->calculateDistanceInMeters(
-            $latitude,
-            $longitude,
-            (float) config('attendance.office_latitude'),
-            (float) config('attendance.office_longitude'),
-        );
+        $office = $this->officeLocation->get();
 
-        return $distance <= (float) config('attendance.max_checkin_distance_meters');
+        $officeLat = $office->latitude ?? (float) config('attendance.office_latitude');
+        $officeLon = $office->longitude ?? (float) config('attendance.office_longitude');
+        $radius = $office->radius_meters ?? (int) config('attendance.max_checkin_distance_meters');
+
+        $distance = $this->calculateDistanceInMeters($latitude, $longitude, $officeLat, $officeLon);
+
+        return $distance <= $radius;
     }
 }

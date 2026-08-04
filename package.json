@@ -20,6 +20,7 @@
     },
     "dependencies": {
         "@fullcalendar/core": "^6.1.21",
-        "@fullcalendar/daygrid": "^6.1.21"
+        "@fullcalendar/daygrid": "^6.1.21",
+        "leaflet": "^1.9.4"
     }
 }

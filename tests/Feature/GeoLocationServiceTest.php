@@ -5,10 +5,14 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Services\GeoLocationService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class GeoLocationServiceTest extends TestCase
 {
+    use RefreshDatabase;
+
     private const EARTH_RADIUS_METERS = 6371000.0;
 
     public function test_coordinates_exactly_on_the_office_are_zero_meters_away_and_within_radius(): void
@@ -44,6 +48,28 @@ class GeoLocationServiceTest extends TestCase
 
         $this->assertEqualsWithDelta(1000.0, $distance, 1.0);
         $this->assertFalse($service->isWithinOfficeRadius($lat, $lon));
+    }
+
+    public function test_an_hr_configured_office_location_overrides_the_env_default(): void
+    {
+        $service = $this->app->make(GeoLocationService::class);
+        [$configuredLat, $configuredLon] = $this->officeCoordinates();
+
+        // A DB-configured office 1000m north of the .env default - a point
+        // near the .env default should now read as *outside* the radius,
+        // proving the DB row actually won, not the fallback.
+        $deltaLatDegrees = rad2deg(1000 / self::EARTH_RADIUS_METERS);
+        DB::table('office_location')->insert([
+            'latitude' => $configuredLat + $deltaLatDegrees,
+            'longitude' => $configuredLon,
+            'radius_meters' => 100,
+            'label' => 'Head Office',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->assertFalse($service->isWithinOfficeRadius($configuredLat, $configuredLon));
+        $this->assertTrue($service->isWithinOfficeRadius($configuredLat + $deltaLatDegrees, $configuredLon));
     }
 
     /**

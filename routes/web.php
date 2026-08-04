@@ -9,6 +9,7 @@ use App\Livewire\Admin\Employees;
 use App\Livewire\Admin\Holidays;
 use App\Livewire\Admin\LeaveApprovals;
 use App\Livewire\Admin\LeaveTypes;
+use App\Livewire\Admin\OfficeLocation;
 use App\Livewire\Admin\WorkSchedule;
 use App\Livewire\Attendance\CheckIn;
 use App\Livewire\Leave\ApprovalQueue;
@@ -44,6 +45,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/admin/leave-types', LeaveTypes::class)->name('admin.leave-types');
     Route::get('/admin/work-schedule', WorkSchedule::class)->name('admin.work-schedule');
     Route::get('/admin/holidays', Holidays::class)->name('admin.holidays');
+    Route::get('/admin/office-location', OfficeLocation::class)->name('admin.office-location');
 });
 
 require __DIR__.'/auth.php';
