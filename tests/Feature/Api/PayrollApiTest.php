@@ -30,6 +30,20 @@ class PayrollApiTest extends TestCase
             ->assertUnauthorized();
     }
 
+    public function test_non_hr_users_cannot_access_the_payroll_summary(): void
+    {
+        $employee = User::factory()->create();
+        $manager = User::factory()->manager()->create();
+
+        foreach ([$employee, $manager] as $user) {
+            $token = $user->createToken('mobile-app-token')->plainTextToken;
+
+            $this->withHeader('Authorization', "Bearer {$token}")
+                ->getJson('/api/v1/payroll/summary?start_date=2026-08-01&end_date=2026-08-31')
+                ->assertForbidden();
+        }
+    }
+
     public function test_request_missing_date_parameters_is_unprocessable(): void
     {
         $hr = User::factory()->hr()->create();

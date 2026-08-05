@@ -13,6 +13,8 @@ final class PayrollController extends Controller
 {
     public function summary(Request $request, AttendanceExportService $service): JsonResponse
     {
+        abort_unless($request->user()->isHr(), 403);
+
         $validated = $request->validate([
             'start_date' => ['required', 'date'],
             'end_date' => ['required', 'date', 'after_or_equal:start_date'],
