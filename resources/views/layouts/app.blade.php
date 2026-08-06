@@ -33,6 +33,8 @@
                         @endisset
                     </div>
 
+                    <livewire:notification-bell />
+
                     <x-dropdown align="right" width="48">
                         <x-slot name="trigger">
                             <button class="flex items-center gap-2 rounded-full text-sm focus:outline-none">

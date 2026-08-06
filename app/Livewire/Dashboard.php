@@ -21,6 +21,8 @@ use Livewire\Component;
 #[Layout('layouts.app')]
 class Dashboard extends Component
 {
+    public bool $showWelcome = false;
+
     /**
      * HR has its own real dashboard (Admin\Dashboard) with live company
      * KPIs - this generic quick-links page is for Employee/Manager only.
@@ -32,7 +34,17 @@ class Dashboard extends Component
     {
         if (Auth::user()->isHr()) {
             $this->redirect(route('admin.dashboard'));
+
+            return;
         }
+
+        $this->showWelcome = Auth::user()->welcomed_at === null;
+    }
+
+    public function dismissWelcome(): void
+    {
+        Auth::user()->update(['welcomed_at' => now()]);
+        $this->showWelcome = false;
     }
 
     public function render(): View

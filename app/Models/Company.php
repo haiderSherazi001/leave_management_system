@@ -22,5 +22,21 @@ class Company extends Model
         'name',
         'address',
         'website',
+        'dismissed_setup_alerts',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'dismissed_setup_alerts' => 'array',
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function dismissedSetupAlertKeys(): array
+    {
+        return $this->dismissed_setup_alerts ?? [];
+    }
 }

@@ -91,4 +91,24 @@
             </a>
         @endif
     </div>
+
+    @if ($showWelcome)
+        <x-modal name="welcome" :show="true" focusable>
+            <div class="p-6">
+                <h2 class="text-lg font-semibold text-slate-900">Welcome to LeaveDesk, {{ str(Auth::user()->name)->before(' ') }} 👋</h2>
+                <p class="mt-2 text-sm text-slate-600">Here's the quick version of how this works:</p>
+                <ul class="mt-3 space-y-2 text-sm text-slate-600 list-disc list-inside">
+                    <li>Apply for leave online — it's checked against your real balance right away.</li>
+                    <li>Check in and out each day from the Attendance page.</li>
+                    <li>Track the status of anything you've requested under My Requests.</li>
+                    @if (Auth::user()->isManager())
+                        <li>As a manager, you'll be notified here whenever someone on your team requests leave, and you can approve or reject it with a note.</li>
+                    @endif
+                </ul>
+                <div class="mt-6 flex justify-end">
+                    <x-primary-button wire:click="dismissWelcome">Got it, thanks!</x-primary-button>
+                </div>
+            </div>
+        </x-modal>
+    @endif
 </div>

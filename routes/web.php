@@ -17,6 +17,7 @@ use App\Livewire\Leave\ApprovalQueue;
 use App\Livewire\Leave\MyRequests;
 use App\Livewire\Leave\RequestForm;
 use App\Livewire\Leave\TeamCalendar;
+use App\Livewire\Notifications;
 use App\Livewire\Profile;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
@@ -35,6 +36,7 @@ Route::get('/dashboard', Dashboard::class)
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', Profile::class)->name('profile.edit');
+    Route::get('/notifications', Notifications::class)->name('notifications.index');
 
     Route::get('/attendance', CheckIn::class)->name('attendance.check-in');
 
