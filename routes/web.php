@@ -4,7 +4,7 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Admin\AttendanceExportController;
 use App\Http\Controllers\Admin\AttendancePdfExportController;
 use App\Http\Controllers\ProfileController;
-use App\Livewire\Admin\Dashboard;
+use App\Livewire\Admin\Dashboard as AdminDashboard;
 use App\Livewire\Admin\Departments;
 use App\Livewire\Admin\Employees;
 use App\Livewire\Admin\Holidays;
@@ -13,6 +13,7 @@ use App\Livewire\Admin\LeaveTypes;
 use App\Livewire\Admin\OfficeLocation;
 use App\Livewire\Admin\WorkSchedule;
 use App\Livewire\Attendance\CheckIn;
+use App\Livewire\Dashboard;
 use App\Livewire\Leave\ApprovalQueue;
 use App\Livewire\Leave\MyRequests;
 use App\Livewire\Leave\RequestForm;
@@ -28,9 +29,9 @@ Route::get('/', function () {
     return redirect()->route($hrExists ? 'login' : 'setup');
 });
 
-Route::get('/dashboard', function () {
-    return view('dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+Route::get('/dashboard', Dashboard::class)
+    ->middleware(['auth', 'verified'])
+    ->name('dashboard');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -42,7 +43,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/leave/approvals', ApprovalQueue::class)->name('leave.approvals');
     Route::get('/leave/team-calendar', TeamCalendar::class)->name('leave.team-calendar');
 
-    Route::get('/admin/dashboard', Dashboard::class)->name('admin.dashboard');
+    Route::get('/admin/dashboard', AdminDashboard::class)->name('admin.dashboard');
     Route::get('/admin/attendance/export', AttendanceExportController::class)->name('admin.attendance.export');
     Route::get('/admin/attendance/export-pdf', AttendancePdfExportController::class)->name('admin.attendance.export-pdf');
     Route::get('/admin/leave-approvals', LeaveApprovals::class)->name('admin.leave-approvals');
