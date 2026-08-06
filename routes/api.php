@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\HrLeaveController;
 use App\Http\Controllers\Api\LeaveController;
 use App\Http\Controllers\Api\ManagerLeaveController;
 use App\Http\Controllers\Api\PayrollController;
+use App\Http\Middleware\SetTenantFromApiUser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -22,7 +23,7 @@ Route::prefix('v1')->group(function () {
     Route::post('/auth/login', [AuthController::class, 'login']);
 });
 
-Route::middleware('auth:sanctum')->prefix('v1')->group(function () {
+Route::middleware(['auth:sanctum', SetTenantFromApiUser::class])->prefix('v1')->group(function () {
     Route::get('/payroll/summary', [PayrollController::class, 'summary']);
 
     Route::post('/auth/logout', [AuthController::class, 'logout']);

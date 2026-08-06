@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Services\LeaveTypeService;
+use App\Support\Tenant;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -68,7 +69,7 @@ final class LeaveTypeController extends Controller
     {
         abort_unless($request->user()->isHr(), 403);
 
-        $leaveType = DB::table('leave_types')->where('id', $id)->first();
+        $leaveType = DB::table('leave_types')->where('company_id', Tenant::id())->where('id', $id)->first();
         abort_if($leaveType === null, 404);
 
         $service->setActive($id, ! (bool) $leaveType->is_active);
@@ -82,8 +83,8 @@ final class LeaveTypeController extends Controller
     private function validateLeaveType(Request $request, ?int $editingId): array
     {
         return $request->validate([
-            'name' => ['required', 'string', 'max:100', Rule::unique('leave_types', 'name')->ignore($editingId)],
-            'code' => ['required', 'string', 'max:20', Rule::unique('leave_types', 'code')->ignore($editingId)],
+            'name' => ['required', 'string', 'max:100', Rule::unique('leave_types', 'name')->where('company_id', Tenant::id())->ignore($editingId)],
+            'code' => ['required', 'string', 'max:20', Rule::unique('leave_types', 'code')->where('company_id', Tenant::id())->ignore($editingId)],
             'yearly_allocation_days' => ['required', 'integer', 'min:0', 'max:365'],
             'carry_forward_enabled' => ['boolean'],
             'carry_forward_max_days' => ['nullable', 'integer', 'min:0', 'max:365'],

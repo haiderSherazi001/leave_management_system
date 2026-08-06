@@ -7,6 +7,7 @@ namespace App\Livewire\Admin;
 use App\Enums\UserRole;
 use App\Services\DepartmentService;
 use App\Services\EmployeeDirectoryService;
+use App\Support\Tenant;
 use DomainException;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
@@ -84,13 +85,13 @@ class Employees extends Component
                         return;
                     }
 
-                    if (DB::table('departments')->where('manager_id', $this->editingId)->exists()) {
+                    if (DB::table('departments')->where('company_id', Tenant::id())->where('manager_id', $this->editingId)->exists()) {
                         $fail('This person heads a department — reassign it before changing their role.');
 
                         return;
                     }
 
-                    if (DB::table('users')->where('manager_id', $this->editingId)->where('is_active', true)->exists()) {
+                    if (DB::table('users')->where('company_id', Tenant::id())->where('manager_id', $this->editingId)->where('is_active', true)->exists()) {
                         $fail('This person has employees reporting to them — reassign those first.');
                     }
                 },
@@ -98,7 +99,7 @@ class Employees extends Component
             'departmentId' => [
                 'nullable',
                 'integer',
-                Rule::exists('departments', 'id')->where('is_active', true),
+                Rule::exists('departments', 'id')->where('is_active', true)->where('company_id', Tenant::id()),
                 // A department has exactly one manager (departments.manager_id).
                 // A manager-role employee may only be placed into a department
                 // that has no manager yet, or the one they already head —
@@ -109,7 +110,7 @@ class Employees extends Component
                         return;
                     }
 
-                    $currentManagerId = DB::table('departments')->where('id', $value)->value('manager_id');
+                    $currentManagerId = DB::table('departments')->where('company_id', Tenant::id())->where('id', $value)->value('manager_id');
 
                     if ($currentManagerId !== null && $currentManagerId !== $this->editingId) {
                         $fail('This department already has a different manager assigned.');
@@ -119,7 +120,7 @@ class Employees extends Component
             'managerId' => [
                 'nullable',
                 'integer',
-                Rule::exists('users', 'id')->where(fn ($query) => $query->whereIn('role', ['manager', 'hr'])->where('is_active', true)),
+                Rule::exists('users', 'id')->where(fn ($query) => $query->whereIn('role', ['manager', 'hr'])->where('is_active', true))->where('company_id', Tenant::id()),
                 Rule::notIn([$this->editingId]),
                 // Strict top-down hierarchy: HR is never managed by anyone
                 // (save() already forces this to null before we get here —
@@ -139,7 +140,7 @@ class Employees extends Component
                     }
 
                     if ($this->role === UserRole::Manager->value
-                        && DB::table('users')->where('id', $value)->value('role') === UserRole::Manager->value) {
+                        && DB::table('users')->where('company_id', Tenant::id())->where('id', $value)->value('role') === UserRole::Manager->value) {
                         $fail('A manager cannot be assigned as another manager\'s manager.');
                     }
                 },
@@ -158,7 +159,7 @@ class Employees extends Component
 
     public function edit(int $userId): void
     {
-        $user = DB::table('users')->where('id', $userId)->first();
+        $user = DB::table('users')->where('company_id', Tenant::id())->where('id', $userId)->first();
 
         if ($user === null) {
             return;
@@ -232,7 +233,7 @@ class Employees extends Component
     public function toggleActive(int $userId, EmployeeDirectoryService $service): void
     {
         $this->errorMessage = null;
-        $user = DB::table('users')->where('id', $userId)->first();
+        $user = DB::table('users')->where('company_id', Tenant::id())->where('id', $userId)->first();
 
         if ($user === null) {
             return;

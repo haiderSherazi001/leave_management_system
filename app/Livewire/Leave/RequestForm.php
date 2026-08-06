@@ -7,6 +7,7 @@ namespace App\Livewire\Leave;
 use App\Services\HolidayService;
 use App\Services\LeaveBalanceService;
 use App\Services\LeaveRequestService;
+use App\Support\Tenant;
 use Carbon\CarbonImmutable;
 use DomainException;
 use Illuminate\Contracts\View\View;
@@ -37,7 +38,7 @@ class RequestForm extends Component
     protected function rules(): array
     {
         return [
-            'leaveTypeId' => ['required', 'integer', Rule::exists('leave_types', 'id')->where('is_active', true)],
+            'leaveTypeId' => ['required', 'integer', Rule::exists('leave_types', 'id')->where('is_active', true)->where('company_id', Tenant::id())],
             'startDate' => ['required', 'date', 'after_or_equal:today'],
             'endDate' => ['required', 'date', 'after_or_equal:startDate'],
             'reason' => ['required', 'string', 'min:3', 'max:1000'],
@@ -82,7 +83,7 @@ class RequestForm extends Component
         $userId = (int) Auth::id();
 
         return view('livewire.leave.request-form', [
-            'leaveTypes' => DB::table('leave_types')->where('is_active', true)->orderBy('name')->get(),
+            'leaveTypes' => DB::table('leave_types')->where('company_id', Tenant::id())->where('is_active', true)->orderBy('name')->get(),
             'balances' => $balanceService->forUser($userId, CarbonImmutable::now()->year),
             'upcomingHolidays' => $holidays->upcoming(5),
         ]);

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Support\Tenant;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -15,7 +16,7 @@ final class WorkScheduleService
 
     public function get(): ?object
     {
-        $schedule = DB::table('work_schedule')->first();
+        $schedule = DB::table('work_schedule')->where('company_id', Tenant::id())->first();
 
         if ($schedule === null) {
             return null;
@@ -35,7 +36,7 @@ final class WorkScheduleService
      */
     public function save(array $workingDays, string $startTime, string $endTime, int $graceMinutes): void
     {
-        $existing = DB::table('work_schedule')->first();
+        $existing = DB::table('work_schedule')->where('company_id', Tenant::id())->first();
 
         $data = [
             'working_days' => json_encode(array_values($workingDays)),
@@ -46,7 +47,7 @@ final class WorkScheduleService
         ];
 
         if ($existing === null) {
-            DB::table('work_schedule')->insert([...$data, 'created_at' => now()]);
+            DB::table('work_schedule')->insert([...$data, 'company_id' => Tenant::id(), 'created_at' => now()]);
         } else {
             DB::table('work_schedule')->where('id', $existing->id)->update($data);
         }

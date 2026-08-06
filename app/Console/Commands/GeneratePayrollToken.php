@@ -15,7 +15,7 @@ class GeneratePayrollToken extends Command
      *
      * @var string
      */
-    protected $signature = 'payroll:generate-token {email? : Email of the HR/Admin user to generate the token for; defaults to the first active HR user}';
+    protected $signature = 'payroll:generate-token {email? : Email of the HR/Admin user to generate the token for}';
 
     /**
      * The console command description.
@@ -28,14 +28,38 @@ class GeneratePayrollToken extends Command
     {
         $email = $this->argument('email');
 
-        $user = $email !== null
-            ? User::where('email', $email)->where('is_active', true)->first()
-            : User::where('role', UserRole::Hr)->where('is_active', true)->first();
+        if ($email === null) {
+            // With multiple companies now possible, "the first active HR
+            // user" (the old default) is meaningless — there's no longer a
+            // single HR to default to, and guessing one would silently
+            // issue a token for an arbitrary company. List every company's
+            // active HR so the operator can rerun with a specific email
+            // instead. This runs with no session, so User's tenant scope
+            // is a no-op here on purpose — a global listing is exactly
+            // what's needed to show every candidate across every company.
+            $hrUsers = User::where('role', UserRole::Hr)->where('is_active', true)->get(['name', 'email', 'company_id']);
+
+            if ($hrUsers->isEmpty()) {
+                $this->error('No active HR user found in any company.');
+
+                return self::FAILURE;
+            }
+
+            $this->error('An email is required now that more than one company can exist. Active HR accounts:');
+
+            foreach ($hrUsers as $hr) {
+                $this->line("  {$hr->email} — {$hr->name}");
+            }
+
+            $this->line('Run again as: php artisan payroll:generate-token {email}');
+
+            return self::FAILURE;
+        }
+
+        $user = User::where('email', $email)->where('is_active', true)->first();
 
         if ($user === null) {
-            $this->error($email !== null
-                ? "No active user found with the email [{$email}]."
-                : 'No active HR user found. Pass an email explicitly: php artisan payroll:generate-token {email}');
+            $this->error("No active user found with the email [{$email}].");
 
             return self::FAILURE;
         }

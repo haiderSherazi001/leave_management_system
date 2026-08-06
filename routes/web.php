@@ -1,6 +1,5 @@
 <?php
 
-use App\Enums\UserRole;
 use App\Http\Controllers\Admin\AttendanceExportController;
 use App\Http\Controllers\Admin\AttendancePdfExportController;
 use App\Livewire\Admin\Dashboard as AdminDashboard;
@@ -18,16 +17,16 @@ use App\Livewire\Leave\MyRequests;
 use App\Livewire\Leave\RequestForm;
 use App\Livewire\Leave\TeamCalendar;
 use App\Livewire\Profile;
-use App\Models\User;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    // A fresh deployment has no HR account yet - send the first visitor to
-    // setup instead of a login screen there's no way to actually get past.
-    $hrExists = User::where('role', UserRole::Hr)->where('is_active', true)->exists();
+    if (Auth::check()) {
+        return redirect()->route(Auth::user()->homeRouteName());
+    }
 
-    return redirect()->route($hrExists ? 'login' : 'setup');
-});
+    return view('landing');
+})->name('landing');
 
 Route::get('/dashboard', Dashboard::class)
     ->middleware(['auth', 'verified'])

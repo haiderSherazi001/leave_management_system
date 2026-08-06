@@ -12,7 +12,7 @@ class LeaveTypeSeeder extends Seeder
 {
     use WithoutModelEvents;
 
-    public function run(): void
+    public function run(int $companyId): void
     {
         $leaveTypes = [
             [
@@ -43,8 +43,8 @@ class LeaveTypeSeeder extends Seeder
 
         foreach ($leaveTypes as $leaveType) {
             DB::table('leave_types')->updateOrInsert(
-                ['code' => $leaveType['code']],
-                [...$leaveType, 'created_at' => now(), 'updated_at' => now()],
+                ['code' => $leaveType['code'], 'company_id' => $companyId],
+                [...$leaveType, 'company_id' => $companyId, 'created_at' => now(), 'updated_at' => now()],
             );
         }
     }

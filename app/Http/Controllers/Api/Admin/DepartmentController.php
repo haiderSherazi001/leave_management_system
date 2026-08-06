@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Services\DepartmentService;
 use App\Services\EmployeeDirectoryService;
+use App\Support\Tenant;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -63,7 +64,7 @@ final class DepartmentController extends Controller
     {
         abort_unless($request->user()->isHr(), 403);
 
-        $department = DB::table('departments')->where('id', $id)->first();
+        $department = DB::table('departments')->where('company_id', Tenant::id())->where('id', $id)->first();
         abort_if($department === null, 404);
 
         $service->setActive($id, ! (bool) $department->is_active);
@@ -77,12 +78,12 @@ final class DepartmentController extends Controller
     private function validateDepartment(Request $request, ?int $editingId): array
     {
         return $request->validate([
-            'name' => ['required', 'string', 'max:100', Rule::unique('departments', 'name')->ignore($editingId)],
+            'name' => ['required', 'string', 'max:100', Rule::unique('departments', 'name')->where('company_id', Tenant::id())->ignore($editingId)],
             'manager_id' => [
                 'nullable',
                 'integer',
-                Rule::exists('users', 'id')->where(fn ($query) => $query->whereIn('role', ['manager', 'hr'])->where('is_active', true)),
-                Rule::unique('departments', 'manager_id')->ignore($editingId),
+                Rule::exists('users', 'id')->where(fn ($query) => $query->whereIn('role', ['manager', 'hr'])->where('is_active', true))->where('company_id', Tenant::id()),
+                Rule::unique('departments', 'manager_id')->where('company_id', Tenant::id())->ignore($editingId),
             ],
         ], [
             'manager_id.unique' => 'This manager already heads another department.',

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Livewire\Admin;
 
 use App\Services\HolidayService;
+use App\Support\Tenant;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -41,7 +42,7 @@ class Holidays extends Component
     protected function rules(): array
     {
         return [
-            'date' => ['required', 'date', Rule::unique('holidays', 'date')->ignore($this->editingId)],
+            'date' => ['required', 'date', Rule::unique('holidays', 'date')->where('company_id', Tenant::id())->ignore($this->editingId)],
             'name' => ['required', 'string', 'max:150'],
         ];
     }
@@ -55,7 +56,7 @@ class Holidays extends Component
 
     public function edit(int $holidayId): void
     {
-        $holiday = DB::table('holidays')->where('id', $holidayId)->first();
+        $holiday = DB::table('holidays')->where('company_id', Tenant::id())->where('id', $holidayId)->first();
 
         if ($holiday === null) {
             return;

@@ -9,9 +9,11 @@ use App\Services\HolidayService;
 use App\Services\LeaveBalanceService;
 use App\Services\LeaveRequestService;
 use App\Services\LeaveTypeService;
+use App\Support\Tenant;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 final class LeaveController extends Controller
 {
@@ -61,7 +63,7 @@ final class LeaveController extends Controller
     public function store(Request $request, LeaveRequestService $service): JsonResponse
     {
         $validated = $request->validate([
-            'leave_type_id' => ['required', 'integer', 'exists:leave_types,id'],
+            'leave_type_id' => ['required', 'integer', Rule::exists('leave_types', 'id')->where('company_id', Tenant::id())],
             'start_date' => ['required', 'date', 'after_or_equal:today'],
             'end_date' => ['required', 'date', 'after_or_equal:start_date'],
             'is_half_day' => ['sometimes', 'boolean'],

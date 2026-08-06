@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Support\Tenant;
 use Illuminate\Support\Facades\DB;
 
 final class LeaveTypeService
@@ -18,6 +19,7 @@ final class LeaveTypeService
     public function list(?string $search = null, ?string $status = null): array
     {
         return DB::table('leave_types')
+            ->where('company_id', Tenant::id())
             ->when($search !== null && $search !== '', function ($query) use ($search): void {
                 $query->where(function ($query) use ($search): void {
                     $query->where('name', 'like', "%{$search}%")
@@ -41,6 +43,7 @@ final class LeaveTypeService
     public function activeList(): array
     {
         return DB::table('leave_types')
+            ->where('company_id', Tenant::id())
             ->where('is_active', true)
             ->orderBy('name')
             ->get()
@@ -56,6 +59,7 @@ final class LeaveTypeService
         ?string $description,
     ): int {
         $leaveTypeId = DB::table('leave_types')->insertGetId([
+            'company_id' => Tenant::id(),
             'name' => $name,
             'code' => $code,
             'yearly_allocation_days' => $yearlyAllocationDays,
@@ -80,20 +84,26 @@ final class LeaveTypeService
         ?int $carryForwardMaxDays,
         ?string $description,
     ): void {
-        DB::table('leave_types')->where('id', $leaveTypeId)->update([
-            'name' => $name,
-            'code' => $code,
-            'yearly_allocation_days' => $yearlyAllocationDays,
-            'carry_forward_enabled' => $carryForwardEnabled,
-            'carry_forward_max_days' => $carryForwardEnabled ? $carryForwardMaxDays : null,
-            'description' => $description,
-            'updated_at' => now(),
-        ]);
+        DB::table('leave_types')
+            ->where('id', $leaveTypeId)
+            ->where('company_id', Tenant::id())
+            ->update([
+                'name' => $name,
+                'code' => $code,
+                'yearly_allocation_days' => $yearlyAllocationDays,
+                'carry_forward_enabled' => $carryForwardEnabled,
+                'carry_forward_max_days' => $carryForwardEnabled ? $carryForwardMaxDays : null,
+                'description' => $description,
+                'updated_at' => now(),
+            ]);
     }
 
     public function setActive(int $leaveTypeId, bool $active): void
     {
-        DB::table('leave_types')->where('id', $leaveTypeId)->update(['is_active' => $active]);
+        DB::table('leave_types')
+            ->where('id', $leaveTypeId)
+            ->where('company_id', Tenant::id())
+            ->update(['is_active' => $active]);
 
         if ($active) {
             $this->balances->provisionForLeaveType($leaveTypeId, (int) date('Y'));

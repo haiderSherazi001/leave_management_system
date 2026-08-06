@@ -6,6 +6,7 @@ namespace App\Livewire\Admin;
 
 use App\Services\DepartmentService;
 use App\Services\EmployeeDirectoryService;
+use App\Support\Tenant;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -42,15 +43,15 @@ class Departments extends Component
     protected function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:100', Rule::unique('departments', 'name')->ignore($this->editingId)],
+            'name' => ['required', 'string', 'max:100', Rule::unique('departments', 'name')->where('company_id', Tenant::id())->ignore($this->editingId)],
             'managerId' => [
                 'nullable',
                 'integer',
-                Rule::exists('users', 'id')->where(fn ($query) => $query->whereIn('role', ['manager', 'hr'])->where('is_active', true)),
+                Rule::exists('users', 'id')->where(fn ($query) => $query->whereIn('role', ['manager', 'hr'])->where('is_active', true))->where('company_id', Tenant::id()),
                 // A manager can only head one department at a time — null values
                 // are exempt automatically since the 'nullable' rule above skips
                 // the rest of the chain when managerId is empty.
-                Rule::unique('departments', 'manager_id')->ignore($this->editingId),
+                Rule::unique('departments', 'manager_id')->where('company_id', Tenant::id())->ignore($this->editingId),
             ],
         ];
     }
@@ -74,7 +75,7 @@ class Departments extends Component
 
     public function edit(int $departmentId): void
     {
-        $department = DB::table('departments')->where('id', $departmentId)->first();
+        $department = DB::table('departments')->where('company_id', Tenant::id())->where('id', $departmentId)->first();
 
         if ($department === null) {
             return;
@@ -108,7 +109,7 @@ class Departments extends Component
 
     public function toggleActive(int $departmentId, DepartmentService $service): void
     {
-        $department = DB::table('departments')->where('id', $departmentId)->first();
+        $department = DB::table('departments')->where('company_id', Tenant::id())->where('id', $departmentId)->first();
 
         if ($department === null) {
             return;

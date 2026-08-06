@@ -9,6 +9,7 @@ use App\Enums\LeaveRequestStatus;
 use App\Models\Attendance;
 use App\Models\LeaveRequest;
 use App\Models\User;
+use App\Support\Tenant;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 
@@ -33,7 +34,10 @@ final class AttendanceExportService
      */
     public function rowsBetween(string $start, string $end): Collection
     {
-        $users = User::where('is_active', true)->orderBy('name')->get(['id', 'name']);
+        // User carries no automatic tenant scope (see the model's own
+        // docblock - it's the Authenticatable, scoping it would recurse
+        // into session auth resolution), so it's filtered explicitly here.
+        $users = User::where('company_id', Tenant::id())->where('is_active', true)->orderBy('name')->get(['id', 'name']);
 
         $attendanceByKey = Attendance::with('user')
             ->whereBetween('date', [$start, $end])

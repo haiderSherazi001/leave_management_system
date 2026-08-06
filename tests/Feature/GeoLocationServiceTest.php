@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Services\GeoLocationService;
+use App\Support\Tenant;
 use DomainException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -78,6 +79,7 @@ class GeoLocationServiceTest extends TestCase
 
         if (! DB::table('office_location')->exists()) {
             DB::table('office_location')->insert([
+                'company_id' => Tenant::id(),
                 'latitude' => $lat,
                 'longitude' => $lon,
                 'radius_meters' => 100,

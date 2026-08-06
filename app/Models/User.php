@@ -6,6 +6,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Enums\UserRole;
+use App\Support\Tenant;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -18,6 +19,31 @@ class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable;
+
+    /**
+     * Deliberately does NOT use BelongsToCompany/CompanyScope, unlike every
+     * other tenant-owned model. User is the Authenticatable: the session
+     * guard resolves the logged-in user by re-querying User on every
+     * authenticated request (EloquentUserProvider::retrieveById()). If that
+     * query carried a global scope reading Tenant::id() -> Auth::user(), it
+     * would recurse infinitely (Auth::user() re-entering its own
+     * still-in-progress resolution) - this was hit and confirmed via a real
+     * HTTP request during rollout (a PHP memory-exhaustion fatal, not
+     * caught by tests since actingAs() injects the user directly and never
+     * exercises retrieveById()). Every listing/lookup of users elsewhere in
+     * the app scopes company_id explicitly by hand instead - see
+     * EmployeeDirectoryService, AttendanceExportService, LeaveRequestService.
+     * Only the creating-time auto-stamp is safe to keep (fires on insert,
+     * never during auth resolution).
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (self $model): void {
+            if (blank($model->company_id) && Tenant::id() !== null) {
+                $model->company_id = Tenant::id();
+            }
+        });
+    }
 
     /**
      * The attributes that are mass assignable.
@@ -33,6 +59,8 @@ class User extends Authenticatable
         'department_id',
         'manager_id',
         'joined_at',
+        'company_id',
+        'welcomed_at',
     ];
 
     /**
@@ -58,7 +86,13 @@ class User extends Authenticatable
             'role' => UserRole::class,
             'is_active' => 'boolean',
             'joined_at' => 'date',
+            'welcomed_at' => 'datetime',
         ];
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
     }
 
     public function department(): BelongsTo

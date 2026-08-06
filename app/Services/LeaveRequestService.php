@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Notifications\LeaveRequestAwaitingHrApprovalNotification;
 use App\Notifications\LeaveRequestStatusNotification;
 use App\Notifications\NewLeaveRequestNotification;
+use App\Support\Tenant;
 use Carbon\CarbonImmutable;
 use DomainException;
 use Illuminate\Notifications\Notification;
@@ -73,13 +74,17 @@ final class LeaveRequestService
             throw new DomainException('A half-day request must have the same start and end date.');
         }
 
-        $role = DB::table('users')->where('id', $userId)->where('is_active', true)->value('role');
+        $role = DB::table('users')
+            ->where('company_id', Tenant::id())
+            ->where('id', $userId)
+            ->where('is_active', true)
+            ->value('role');
 
         if ($role === null) {
             throw new DomainException('Inactive employees cannot submit leave requests.');
         }
 
-        if (! DB::table('leave_types')->where('id', $leaveTypeId)->where('is_active', true)->exists()) {
+        if (! DB::table('leave_types')->where('company_id', Tenant::id())->where('id', $leaveTypeId)->where('is_active', true)->exists()) {
             throw new DomainException('This leave type is no longer active.');
         }
 
@@ -115,6 +120,7 @@ final class LeaveRequestService
         };
 
         $leaveRequestId = DB::table('leave_requests')->insertGetId([
+            'company_id' => Tenant::id(),
             'user_id' => $userId,
             'leave_type_id' => $leaveTypeId,
             'start_date' => $startDate->toDateString(),
@@ -152,6 +158,7 @@ final class LeaveRequestService
         ?int $excludingRequestId = null,
     ): bool {
         $query = DB::table('leave_requests')
+            ->where('company_id', Tenant::id())
             ->where('user_id', $userId)
             ->whereIn('status', [
                 LeaveRequestStatus::PendingManager->value,
@@ -312,6 +319,7 @@ final class LeaveRequestService
             ->join('leave_types', 'leave_types.id', '=', 'leave_requests.leave_type_id')
             ->leftJoin('users as approvers', 'approvers.id', '=', 'leave_requests.approver_id')
             ->leftJoin('users as hr_approvers', 'hr_approvers.id', '=', 'leave_requests.hr_approver_id')
+            ->where('leave_requests.company_id', Tenant::id())
             ->where('leave_requests.user_id', $userId)
             ->when($leaveTypeId !== null, fn ($query) => $query->where('leave_requests.leave_type_id', $leaveTypeId))
             ->when(
@@ -353,6 +361,7 @@ final class LeaveRequestService
             ->join('users', 'users.id', '=', 'leave_requests.user_id')
             ->leftJoin('departments', 'departments.id', '=', 'users.department_id')
             ->join('leave_types', 'leave_types.id', '=', 'leave_requests.leave_type_id')
+            ->where('leave_requests.company_id', Tenant::id())
             ->where('leave_requests.status', LeaveRequestStatus::PendingManager->value)
             ->where(function ($query) use ($managerId): void {
                 $query->where('users.manager_id', $managerId)
@@ -395,6 +404,7 @@ final class LeaveRequestService
             ->join('users', 'users.id', '=', 'leave_requests.user_id')
             ->join('leave_types', 'leave_types.id', '=', 'leave_requests.leave_type_id')
             ->leftJoin('users as hr_approvers', 'hr_approvers.id', '=', 'leave_requests.hr_approver_id')
+            ->where('leave_requests.company_id', Tenant::id())
             ->where('leave_requests.approver_id', $managerId)
             ->whereIn('leave_requests.status', [LeaveRequestStatus::Approved->value, LeaveRequestStatus::Rejected->value])
             ->when(
@@ -436,6 +446,7 @@ final class LeaveRequestService
             ->leftJoin('users as direct_managers', 'direct_managers.id', '=', 'users.manager_id')
             ->leftJoin('users as department_heads', 'department_heads.id', '=', 'departments.manager_id')
             ->join('leave_types', 'leave_types.id', '=', 'leave_requests.leave_type_id')
+            ->where('leave_requests.company_id', Tenant::id())
             ->where('leave_requests.status', LeaveRequestStatus::PendingManager->value)
             ->select(
                 'leave_requests.id',
@@ -467,6 +478,7 @@ final class LeaveRequestService
             ->join('users', 'users.id', '=', 'leave_requests.user_id')
             ->join('leave_types', 'leave_types.id', '=', 'leave_requests.leave_type_id')
             ->leftJoin('users as managers', 'managers.id', '=', 'leave_requests.approver_id')
+            ->where('leave_requests.company_id', Tenant::id())
             ->where('leave_requests.status', LeaveRequestStatus::PendingHR->value)
             ->select(
                 'leave_requests.id',
@@ -502,6 +514,7 @@ final class LeaveRequestService
             ->join('leave_types', 'leave_types.id', '=', 'leave_requests.leave_type_id')
             ->leftJoin('users as managers', 'managers.id', '=', 'leave_requests.approver_id')
             ->leftJoin('users as hr_approvers', 'hr_approvers.id', '=', 'leave_requests.hr_approver_id')
+            ->where('leave_requests.company_id', Tenant::id())
             ->whereIn('leave_requests.status', [LeaveRequestStatus::Approved->value, LeaveRequestStatus::Rejected->value])
             ->when(
                 $search !== null && $search !== '',
@@ -549,6 +562,7 @@ final class LeaveRequestService
             ->join('users', 'users.id', '=', 'leave_requests.user_id')
             ->leftJoin('departments', 'departments.id', '=', 'users.department_id')
             ->join('leave_types', 'leave_types.id', '=', 'leave_requests.leave_type_id')
+            ->where('leave_requests.company_id', Tenant::id())
             ->where('leave_requests.status', LeaveRequestStatus::Approved->value)
             ->where('leave_requests.start_date', '<=', $end)
             ->where('leave_requests.end_date', '>=', $start)
@@ -609,6 +623,7 @@ final class LeaveRequestService
     ): void {
         $assignment = DB::table('users as employees')
             ->leftJoin('departments', 'departments.id', '=', 'employees.department_id')
+            ->where('employees.company_id', Tenant::id())
             ->where('employees.id', $employeeId)
             ->select('employees.manager_id as direct_manager_id', 'departments.manager_id as department_manager_id')
             ->first();
@@ -623,10 +638,10 @@ final class LeaveRequestService
             return;
         }
 
-        $employeeName = DB::table('users')->where('id', $employeeId)->value('name') ?? 'An employee';
-        $leaveTypeName = DB::table('leave_types')->where('id', $leaveTypeId)->value('name') ?? 'Leave';
+        $employeeName = DB::table('users')->where('company_id', Tenant::id())->where('id', $employeeId)->value('name') ?? 'An employee';
+        $leaveTypeName = DB::table('leave_types')->where('company_id', Tenant::id())->where('id', $leaveTypeId)->value('name') ?? 'Leave';
 
-        $manager = User::find($managerId);
+        $manager = User::where('company_id', Tenant::id())->where('id', $managerId)->first();
 
         if ($manager === null) {
             return;
@@ -652,10 +667,13 @@ final class LeaveRequestService
      */
     private function notifyHrOfPendingApproval(LeaveRequest $leaveRequest, User $manager): void
     {
-        $employeeName = DB::table('users')->where('id', $leaveRequest->user_id)->value('name') ?? 'An employee';
-        $leaveTypeName = DB::table('leave_types')->where('id', $leaveRequest->leave_type_id)->value('name') ?? 'Leave';
+        $employeeName = DB::table('users')->where('company_id', Tenant::id())->where('id', $leaveRequest->user_id)->value('name') ?? 'An employee';
+        $leaveTypeName = DB::table('leave_types')->where('company_id', Tenant::id())->where('id', $leaveRequest->leave_type_id)->value('name') ?? 'Leave';
 
-        $hrUsers = User::where('role', UserRole::Hr)->where('is_active', true)->get();
+        // User carries no automatic tenant scope (see the model's own
+        // docblock), so it's filtered explicitly here - otherwise this
+        // would notify every company's HR of every other company's requests.
+        $hrUsers = User::where('company_id', Tenant::id())->where('role', UserRole::Hr)->where('is_active', true)->get();
         $isSelfSubmitted = $leaveRequest->user_id === $manager->id;
 
         foreach ($hrUsers as $hrUser) {
@@ -707,7 +725,7 @@ final class LeaveRequestService
             return;
         }
 
-        $leaveTypeName = DB::table('leave_types')->where('id', $leaveRequest->leave_type_id)->value('name') ?? 'Leave';
+        $leaveTypeName = DB::table('leave_types')->where('company_id', Tenant::id())->where('id', $leaveRequest->leave_type_id)->value('name') ?? 'Leave';
 
         $this->safeNotify($employee, new LeaveRequestStatusNotification(
             leaveRequestId: $leaveRequest->id,

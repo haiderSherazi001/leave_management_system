@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Enums\AttendanceStatus;
+use App\Support\Tenant;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use DomainException;
@@ -26,7 +27,11 @@ final class AttendanceService
      */
     public function checkIn(int $userId, string $date, float $latitude, float $longitude): void
     {
-        $existing = DB::table('attendances')->where('user_id', $userId)->where('date', $date)->first();
+        $existing = DB::table('attendances')
+            ->where('company_id', Tenant::id())
+            ->where('user_id', $userId)
+            ->where('date', $date)
+            ->first();
 
         if ($existing !== null && $existing->check_in_at !== null) {
             throw new DomainException('You have already checked in today.');
@@ -51,6 +56,7 @@ final class AttendanceService
 
         if ($existing === null) {
             DB::table('attendances')->insert([
+                'company_id' => Tenant::id(),
                 'user_id' => $userId,
                 'date' => $date,
                 'check_in_at' => $checkInAt,
@@ -79,7 +85,11 @@ final class AttendanceService
 
     public function checkOut(int $userId, string $date): void
     {
-        $existing = DB::table('attendances')->where('user_id', $userId)->where('date', $date)->first();
+        $existing = DB::table('attendances')
+            ->where('company_id', Tenant::id())
+            ->where('user_id', $userId)
+            ->where('date', $date)
+            ->first();
 
         if ($existing === null || $existing->check_in_at === null) {
             throw new DomainException('You must check in before checking out.');
@@ -103,10 +113,15 @@ final class AttendanceService
      */
     public function markOnLeave(int $userId, string $date): void
     {
-        $existing = DB::table('attendances')->where('user_id', $userId)->where('date', $date)->first();
+        $existing = DB::table('attendances')
+            ->where('company_id', Tenant::id())
+            ->where('user_id', $userId)
+            ->where('date', $date)
+            ->first();
 
         if ($existing === null) {
             DB::table('attendances')->insert([
+                'company_id' => Tenant::id(),
                 'user_id' => $userId,
                 'date' => $date,
                 'status' => AttendanceStatus::OnLeave->value,
@@ -176,6 +191,7 @@ final class AttendanceService
     public function findForDate(int $userId, string $date): ?object
     {
         return DB::table('attendances')
+            ->where('company_id', Tenant::id())
             ->where('user_id', $userId)
             ->where('date', $date)
             ->first();
@@ -187,6 +203,7 @@ final class AttendanceService
     public function historyForUser(int $userId, int $limit = 30): array
     {
         return DB::table('attendances')
+            ->where('company_id', Tenant::id())
             ->where('user_id', $userId)
             ->orderByDesc('date')
             ->limit($limit)

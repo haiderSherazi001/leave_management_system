@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Api;
 
 use App\Models\User;
+use App\Support\Tenant;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -35,6 +36,7 @@ class AttendanceApiTest extends TestCase
 
         if (! DB::table('office_location')->exists()) {
             DB::table('office_location')->insert([
+                'company_id' => Tenant::id(),
                 'latitude' => $lat,
                 'longitude' => $lon,
                 'radius_meters' => 100,

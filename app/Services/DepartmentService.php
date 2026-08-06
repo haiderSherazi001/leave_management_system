@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Department;
+use App\Support\Tenant;
 use Illuminate\Support\Facades\DB;
 
 final class DepartmentService
@@ -16,6 +17,7 @@ final class DepartmentService
     {
         return DB::table('departments')
             ->leftJoin('users as managers', 'managers.id', '=', 'departments.manager_id')
+            ->where('departments.company_id', Tenant::id())
             ->select(
                 'departments.id',
                 'departments.name',
@@ -44,12 +46,16 @@ final class DepartmentService
     public function options(?int $currentDepartmentId): array
     {
         $departments = DB::table('departments')
+            ->where('company_id', Tenant::id())
             ->where('is_active', true)
             ->orderBy('name')
             ->get();
 
         if ($currentDepartmentId !== null && ! $departments->contains('id', $currentDepartmentId)) {
-            $current = DB::table('departments')->where('id', $currentDepartmentId)->first();
+            $current = DB::table('departments')
+                ->where('company_id', Tenant::id())
+                ->where('id', $currentDepartmentId)
+                ->first();
 
             if ($current !== null) {
                 $departments->push($current);
@@ -82,6 +88,9 @@ final class DepartmentService
 
     public function setActive(int $departmentId, bool $active): void
     {
-        DB::table('departments')->where('id', $departmentId)->update(['is_active' => $active]);
+        DB::table('departments')
+            ->where('id', $departmentId)
+            ->where('company_id', Tenant::id())
+            ->update(['is_active' => $active]);
     }
 }

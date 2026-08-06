@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Support\Tenant;
 use Illuminate\Support\Facades\DB;
 
 final class OfficeLocationService
 {
     public function get(): ?object
     {
-        $location = DB::table('office_location')->first();
+        $location = DB::table('office_location')->where('company_id', Tenant::id())->first();
 
         if ($location === null) {
             return null;
@@ -27,7 +28,7 @@ final class OfficeLocationService
 
     public function save(float $latitude, float $longitude, int $radiusMeters, ?string $label): void
     {
-        $existing = DB::table('office_location')->first();
+        $existing = DB::table('office_location')->where('company_id', Tenant::id())->first();
 
         $data = [
             'latitude' => $latitude,
@@ -38,7 +39,7 @@ final class OfficeLocationService
         ];
 
         if ($existing === null) {
-            DB::table('office_location')->insert([...$data, 'created_at' => now()]);
+            DB::table('office_location')->insert([...$data, 'company_id' => Tenant::id(), 'created_at' => now()]);
         } else {
             DB::table('office_location')->where('id', $existing->id)->update($data);
         }

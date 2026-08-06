@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Services\HolidayService;
+use App\Support\Tenant;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -63,7 +64,7 @@ final class HolidayController extends Controller
     private function validateHoliday(Request $request, ?int $editingId): array
     {
         return $request->validate([
-            'date' => ['required', 'date', Rule::unique('holidays', 'date')->ignore($editingId)],
+            'date' => ['required', 'date', Rule::unique('holidays', 'date')->where('company_id', Tenant::id())->ignore($editingId)],
             'name' => ['required', 'string', 'max:150'],
         ]);
     }

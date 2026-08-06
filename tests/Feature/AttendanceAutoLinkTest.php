@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Models\WorkSchedule;
 use App\Services\AttendanceService;
 use App\Services\LeaveRequestService;
+use App\Support\Tenant;
 use Carbon\CarbonImmutable;
 use DomainException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -35,6 +36,7 @@ class AttendanceAutoLinkTest extends TestCase
 
         if (! DB::table('office_location')->exists()) {
             DB::table('office_location')->insert([
+                'company_id' => Tenant::id(),
                 'latitude' => $lat,
                 'longitude' => $lon,
                 'radius_meters' => 100,

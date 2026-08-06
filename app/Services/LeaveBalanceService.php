@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Support\Tenant;
 use Illuminate\Support\Facades\DB;
 
 final class LeaveBalanceService
@@ -11,6 +12,7 @@ final class LeaveBalanceService
     public function find(int $userId, int $leaveTypeId, int $year): ?object
     {
         return DB::table('leave_balances')
+            ->where('company_id', Tenant::id())
             ->where('user_id', $userId)
             ->where('leave_type_id', $leaveTypeId)
             ->where('year', $year)
@@ -31,6 +33,7 @@ final class LeaveBalanceService
     public function deductDays(int $userId, int $leaveTypeId, int $year, float $days): void
     {
         DB::table('leave_balances')
+            ->where('company_id', Tenant::id())
             ->where('user_id', $userId)
             ->where('leave_type_id', $leaveTypeId)
             ->where('year', $year)
@@ -40,6 +43,7 @@ final class LeaveBalanceService
     public function restoreDays(int $userId, int $leaveTypeId, int $year, float $days): void
     {
         DB::table('leave_balances')
+            ->where('company_id', Tenant::id())
             ->where('user_id', $userId)
             ->where('leave_type_id', $leaveTypeId)
             ->where('year', $year)
@@ -53,6 +57,7 @@ final class LeaveBalanceService
     {
         return DB::table('leave_balances')
             ->join('leave_types', 'leave_types.id', '=', 'leave_balances.leave_type_id')
+            ->where('leave_balances.company_id', Tenant::id())
             ->where('leave_balances.user_id', $userId)
             ->where('leave_balances.year', $year)
             ->select(
@@ -71,6 +76,7 @@ final class LeaveBalanceService
     public function ensureBalanceForYear(int $userId, int $leaveTypeId, int $year): void
     {
         $exists = DB::table('leave_balances')
+            ->where('company_id', Tenant::id())
             ->where('user_id', $userId)
             ->where('leave_type_id', $leaveTypeId)
             ->where('year', $year)
@@ -80,7 +86,10 @@ final class LeaveBalanceService
             return;
         }
 
-        $leaveType = DB::table('leave_types')->where('id', $leaveTypeId)->first();
+        $leaveType = DB::table('leave_types')
+            ->where('id', $leaveTypeId)
+            ->where('company_id', Tenant::id())
+            ->first();
 
         if ($leaveType === null) {
             return;
@@ -91,6 +100,7 @@ final class LeaveBalanceService
             : 0.0;
 
         DB::table('leave_balances')->insert([
+            'company_id' => Tenant::id(),
             'user_id' => $userId,
             'leave_type_id' => $leaveTypeId,
             'year' => $year,
@@ -131,7 +141,10 @@ final class LeaveBalanceService
      */
     public function provisionForUser(int $userId, int $year): void
     {
-        $leaveTypeIds = DB::table('leave_types')->where('is_active', true)->pluck('id');
+        $leaveTypeIds = DB::table('leave_types')
+            ->where('company_id', Tenant::id())
+            ->where('is_active', true)
+            ->pluck('id');
 
         foreach ($leaveTypeIds as $leaveTypeId) {
             $this->ensureBalanceForYear($userId, $leaveTypeId, $year);
@@ -145,7 +158,10 @@ final class LeaveBalanceService
      */
     public function provisionForLeaveType(int $leaveTypeId, int $year): void
     {
-        $userIds = DB::table('users')->where('is_active', true)->pluck('id');
+        $userIds = DB::table('users')
+            ->where('company_id', Tenant::id())
+            ->where('is_active', true)
+            ->pluck('id');
 
         foreach ($userIds as $userId) {
             $this->ensureBalanceForYear($userId, $leaveTypeId, $year);

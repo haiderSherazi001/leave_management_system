@@ -8,6 +8,7 @@ use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Services\DepartmentService;
 use App\Services\EmployeeDirectoryService;
+use App\Support\Tenant;
 use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -92,7 +93,7 @@ final class EmployeeController extends Controller
     {
         abort_unless($request->user()->isHr(), 403);
 
-        $user = DB::table('users')->where('id', $id)->first();
+        $user = DB::table('users')->where('company_id', Tenant::id())->where('id', $id)->first();
         abort_if($user === null, 404);
 
         $service->setActive($id, ! (bool) $user->is_active);
@@ -128,13 +129,13 @@ final class EmployeeController extends Controller
             'department_id' => [
                 'nullable',
                 'integer',
-                Rule::exists('departments', 'id')->where('is_active', true),
+                Rule::exists('departments', 'id')->where('is_active', true)->where('company_id', Tenant::id()),
                 $this->departmentConflictRule($request, $editingId),
             ],
             'manager_id' => [
                 'nullable',
                 'integer',
-                Rule::exists('users', 'id')->where(fn ($query) => $query->whereIn('role', ['manager', 'hr'])->where('is_active', true)),
+                Rule::exists('users', 'id')->where(fn ($query) => $query->whereIn('role', ['manager', 'hr'])->where('is_active', true))->where('company_id', Tenant::id()),
                 Rule::notIn([$editingId]),
                 $this->managerHierarchyRule($request),
             ],
@@ -154,13 +155,13 @@ final class EmployeeController extends Controller
                 return;
             }
 
-            if (DB::table('departments')->where('manager_id', $editingId)->exists()) {
+            if (DB::table('departments')->where('company_id', Tenant::id())->where('manager_id', $editingId)->exists()) {
                 $fail('This person heads a department — reassign it before changing their role.');
 
                 return;
             }
 
-            if (DB::table('users')->where('manager_id', $editingId)->where('is_active', true)->exists()) {
+            if (DB::table('users')->where('company_id', Tenant::id())->where('manager_id', $editingId)->where('is_active', true)->exists()) {
                 $fail('This person has employees reporting to them — reassign those first.');
             }
         };
@@ -177,7 +178,7 @@ final class EmployeeController extends Controller
                 return;
             }
 
-            $currentManagerId = DB::table('departments')->where('id', $value)->value('manager_id');
+            $currentManagerId = DB::table('departments')->where('company_id', Tenant::id())->where('id', $value)->value('manager_id');
 
             if ($currentManagerId !== null && $currentManagerId !== $editingId) {
                 $fail('This department already has a different manager assigned.');
@@ -204,7 +205,7 @@ final class EmployeeController extends Controller
             }
 
             if ($request->input('role') === UserRole::Manager->value
-                && DB::table('users')->where('id', $value)->value('role') === UserRole::Manager->value) {
+                && DB::table('users')->where('company_id', Tenant::id())->where('id', $value)->value('role') === UserRole::Manager->value) {
                 $fail('A manager cannot be assigned as another manager\'s manager.');
             }
         };

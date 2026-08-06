@@ -8,6 +8,7 @@ use App\Enums\UserRole;
 use App\Models\Department;
 use App\Models\User;
 use App\Notifications\WelcomeNewEmployeeNotification;
+use App\Support\Tenant;
 use DomainException;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
@@ -35,6 +36,7 @@ final class EmployeeDirectoryService
         return DB::table('users as employees')
             ->leftJoin('departments', 'departments.id', '=', 'employees.department_id')
             ->leftJoin('users as managers', 'managers.id', '=', 'employees.manager_id')
+            ->where('employees.company_id', Tenant::id())
             ->select(
                 'employees.id',
                 'employees.name',
@@ -83,13 +85,14 @@ final class EmployeeDirectoryService
         $allowedRoles = $subjectRole === UserRole::Manager->value ? ['hr'] : ['manager', 'hr'];
 
         $managers = DB::table('users')
+            ->where('company_id', Tenant::id())
             ->whereIn('role', $allowedRoles)
             ->where('is_active', true)
             ->orderBy('name')
             ->get();
 
         if ($currentManagerId !== null && ! $managers->contains('id', $currentManagerId)) {
-            $current = DB::table('users')->where('id', $currentManagerId)->first();
+            $current = DB::table('users')->where('company_id', Tenant::id())->where('id', $currentManagerId)->first();
 
             if ($current !== null) {
                 $managers->push($current);
@@ -158,7 +161,7 @@ final class EmployeeDirectoryService
             $data['password'] = Hash::make($password);
         }
 
-        DB::table('users')->where('id', $userId)->update($data);
+        DB::table('users')->where('id', $userId)->where('company_id', Tenant::id())->update($data);
         $this->syncDepartmentHeadship($userId, $role, $departmentId);
     }
 
@@ -196,10 +199,11 @@ final class EmployeeDirectoryService
     public function setActive(int $userId, bool $active): void
     {
         if (! $active) {
-            $user = DB::table('users')->where('id', $userId)->first();
+            $user = DB::table('users')->where('company_id', Tenant::id())->where('id', $userId)->first();
 
             if ($user !== null && $user->role === 'hr') {
                 $remainingActiveHr = DB::table('users')
+                    ->where('company_id', Tenant::id())
                     ->where('role', 'hr')
                     ->where('is_active', true)
                     ->where('id', '!=', $userId)
@@ -211,7 +215,7 @@ final class EmployeeDirectoryService
             }
         }
 
-        DB::table('users')->where('id', $userId)->update(['is_active' => $active]);
+        DB::table('users')->where('id', $userId)->where('company_id', Tenant::id())->update(['is_active' => $active]);
     }
 
     /**

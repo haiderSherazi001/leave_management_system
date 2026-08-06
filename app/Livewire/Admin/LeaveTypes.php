@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Livewire\Admin;
 
 use App\Services\LeaveTypeService;
+use App\Support\Tenant;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -49,8 +50,8 @@ class LeaveTypes extends Component
     protected function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:100', Rule::unique('leave_types', 'name')->ignore($this->editingId)],
-            'code' => ['required', 'string', 'max:20', Rule::unique('leave_types', 'code')->ignore($this->editingId)],
+            'name' => ['required', 'string', 'max:100', Rule::unique('leave_types', 'name')->where('company_id', Tenant::id())->ignore($this->editingId)],
+            'code' => ['required', 'string', 'max:20', Rule::unique('leave_types', 'code')->where('company_id', Tenant::id())->ignore($this->editingId)],
             'yearlyAllocationDays' => ['required', 'integer', 'min:0', 'max:365'],
             'carryForwardEnabled' => ['boolean'],
             'carryForwardMaxDays' => ['nullable', 'integer', 'min:0', 'max:365'],
@@ -67,7 +68,7 @@ class LeaveTypes extends Component
 
     public function edit(int $leaveTypeId): void
     {
-        $leaveType = DB::table('leave_types')->where('id', $leaveTypeId)->first();
+        $leaveType = DB::table('leave_types')->where('company_id', Tenant::id())->where('id', $leaveTypeId)->first();
 
         if ($leaveType === null) {
             return;
@@ -120,7 +121,7 @@ class LeaveTypes extends Component
 
     public function toggleActive(int $leaveTypeId, LeaveTypeService $service): void
     {
-        $leaveType = DB::table('leave_types')->where('id', $leaveTypeId)->first();
+        $leaveType = DB::table('leave_types')->where('company_id', Tenant::id())->where('id', $leaveTypeId)->first();
 
         if ($leaveType === null) {
             return;
