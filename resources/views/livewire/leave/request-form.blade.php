@@ -74,7 +74,12 @@
         <h3 class="text-lg font-semibold text-slate-900 mb-4">Your Leave Balance ({{ now()->year }})</h3>
 
         @if (count($balances) === 0)
-            <p class="text-sm text-slate-500">No leave balances have been set up for you yet. Contact HR.</p>
+            <p class="text-sm text-slate-500">
+                No leave balances have been set up for you yet.
+                @unless (Auth::user()->isHr())
+                    Contact HR.
+                @endunless
+            </p>
         @else
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-slate-200 text-sm">

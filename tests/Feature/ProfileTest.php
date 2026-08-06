@@ -48,6 +48,40 @@ class ProfileTest extends TestCase
         $this->assertStringContainsString('Jan 15, 2026', $html);
     }
 
+    /**
+     * "Contact HR to update these details" makes no sense when HR is the
+     * one looking at the page - they'd be contacting themselves. They get
+     * a link to Admin > Employees (where they genuinely can edit their own
+     * record) instead. Same reasoning for the "no leave balances" message.
+     */
+    public function test_hr_sees_different_wording_than_contact_hr_on_their_own_profile(): void
+    {
+        $hr = User::factory()->hr()->create();
+
+        $html = $this->actingAs($hr)->get('/profile')->getContent();
+
+        $this->assertStringNotContainsString('Contact HR to update these details.', $html);
+        $this->assertStringContainsString('Admin', $html);
+        $this->assertStringContainsString(route('admin.employees'), $html);
+    }
+
+    public function test_non_hr_still_sees_the_contact_hr_wording(): void
+    {
+        $employee = User::factory()->create();
+
+        $this->actingAs($employee)->get('/profile')->assertSee('Contact HR to update these details.');
+    }
+
+    public function test_hr_with_no_balances_does_not_see_contact_hr(): void
+    {
+        $hr = User::factory()->hr()->create();
+
+        $html = $this->actingAs($hr)->get('/profile')->getContent();
+
+        $this->assertStringContainsString('No leave balances have been set up for you yet.', $html);
+        $this->assertStringNotContainsString('No leave balances have been set up for you yet. Contact HR.', $html);
+    }
+
     public function test_profile_shows_a_dash_when_department_and_manager_are_not_set(): void
     {
         $employee = User::factory()->create(['department_id' => null, 'manager_id' => null]);

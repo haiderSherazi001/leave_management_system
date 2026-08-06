@@ -34,14 +34,25 @@
             </div>
         </dl>
 
-        <p class="mt-4 text-xs text-slate-400">Contact HR to update these details.</p>
+        @if ($user->isHr())
+            <p class="mt-4 text-xs text-slate-400">
+                You can update these via <a href="{{ route('admin.employees') }}" class="underline hover:text-slate-600">Admin → Employees</a>.
+            </p>
+        @else
+            <p class="mt-4 text-xs text-slate-400">Contact HR to update these details.</p>
+        @endif
     </x-card>
 
     <x-card>
         <h3 class="text-lg font-semibold text-slate-900 mb-4">My Leave Balances ({{ now()->year }})</h3>
 
         @if (count($balances) === 0)
-            <p class="text-sm text-slate-500">No leave balances have been set up for you yet. Contact HR.</p>
+            <p class="text-sm text-slate-500">
+                No leave balances have been set up for you yet.
+                @unless ($user->isHr())
+                    Contact HR.
+                @endunless
+            </p>
         @else
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-slate-200 text-sm">

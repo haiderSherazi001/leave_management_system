@@ -63,6 +63,30 @@ class LeaveRequestWorkflowTest extends TestCase
         Livewire::test(RequestForm::class)->assertDontSee('Upcoming Holidays');
     }
 
+    /**
+     * "Contact HR" makes no sense when HR themselves has no balance set up -
+     * they'd be contacting themselves. Same fix as the Profile page.
+     */
+    public function test_hr_with_no_balances_does_not_see_contact_hr_on_apply_leave(): void
+    {
+        $hr = User::factory()->hr()->create();
+
+        $this->actingAs($hr);
+
+        Livewire::test(RequestForm::class)
+            ->assertSee('No leave balances have been set up for you yet.')
+            ->assertDontSee('Contact HR.');
+    }
+
+    public function test_employee_with_no_balances_still_sees_contact_hr_on_apply_leave(): void
+    {
+        $employee = User::factory()->create();
+
+        $this->actingAs($employee);
+
+        Livewire::test(RequestForm::class)->assertSee('Contact HR.');
+    }
+
     public function test_employee_can_submit_a_leave_request_within_balance(): void
     {
         $leaveType = LeaveType::factory()->create(['yearly_allocation_days' => 10]);
