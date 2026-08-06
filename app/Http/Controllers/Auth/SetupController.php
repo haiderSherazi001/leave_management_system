@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Auth;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\LeaveBalanceService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -31,7 +32,7 @@ class SetupController extends Controller
         return view('auth.setup');
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, LeaveBalanceService $balances): RedirectResponse
     {
         // Re-checked here, not just in create() - two people loading the
         // empty form before either submits could otherwise both pass the
@@ -46,13 +47,23 @@ class SetupController extends Controller
             'password' => ['required', 'confirmed', 'min:8'],
         ]);
 
+        // joined_at defaults to today rather than asking for it on this
+        // one-time bootstrap form - it's genuinely their first day using
+        // the system. Balances are provisioned the same way
+        // EmployeeDirectoryService::create() does for every other
+        // employee - without this, HR (who can submit leave too, via the
+        // existing auto-approve path) would have zero remaining balance
+        // for every leave type and could never actually apply for leave.
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
             'role' => UserRole::Hr->value,
             'is_active' => true,
+            'joined_at' => now()->toDateString(),
         ]);
+
+        $balances->provisionForUser($user->id, now()->year);
 
         Auth::login($user);
 
