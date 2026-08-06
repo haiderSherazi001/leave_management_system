@@ -3,7 +3,6 @@
 use App\Enums\UserRole;
 use App\Http\Controllers\Admin\AttendanceExportController;
 use App\Http\Controllers\Admin\AttendancePdfExportController;
-use App\Http\Controllers\ProfileController;
 use App\Livewire\Admin\Dashboard as AdminDashboard;
 use App\Livewire\Admin\Departments;
 use App\Livewire\Admin\Employees;
@@ -18,6 +17,7 @@ use App\Livewire\Leave\ApprovalQueue;
 use App\Livewire\Leave\MyRequests;
 use App\Livewire\Leave\RequestForm;
 use App\Livewire\Leave\TeamCalendar;
+use App\Livewire\Profile;
 use App\Models\User;
 use Illuminate\Support\Facades\Route;
 
@@ -34,7 +34,7 @@ Route::get('/dashboard', Dashboard::class)
     ->name('dashboard');
 
 Route::middleware('auth')->group(function () {
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::get('/profile', Profile::class)->name('profile.edit');
 
     Route::get('/attendance', CheckIn::class)->name('attendance.check-in');
 
