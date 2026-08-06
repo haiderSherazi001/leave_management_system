@@ -48,6 +48,27 @@ class ProfileTest extends TestCase
         $this->assertStringContainsString('Jan 15, 2026', $html);
     }
 
+    public function test_profile_shows_the_users_company_details(): void
+    {
+        $employee = User::factory()->create();
+        $employee->company->update(['name' => 'Acme Corp', 'address' => '123 Main St', 'website' => 'https://acme.test']);
+
+        $html = $this->actingAs($employee)->get('/profile')->getContent();
+
+        $this->assertStringContainsString('Acme Corp', $html);
+        $this->assertStringContainsString('123 Main St', $html);
+        $this->assertStringContainsString('https://acme.test', $html);
+    }
+
+    public function test_only_hr_sees_the_link_to_edit_company_details(): void
+    {
+        $employee = User::factory()->create();
+        $hr = User::factory()->hr()->create();
+
+        $this->actingAs($employee)->get('/profile')->assertDontSee(route('admin.company'));
+        $this->actingAs($hr)->get('/profile')->assertSee(route('admin.company'));
+    }
+
     /**
      * "Contact HR to update these details" makes no sense when HR is the
      * one looking at the page - they'd be contacting themselves. They get

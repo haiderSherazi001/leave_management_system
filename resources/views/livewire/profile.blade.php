@@ -44,6 +44,37 @@
     </x-card>
 
     <x-card>
+        <h3 class="text-lg font-semibold text-slate-900 mb-4">Your Company</h3>
+
+        <dl class="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+            <div>
+                <dt class="text-sm text-slate-500">Name</dt>
+                <dd class="mt-0.5 text-sm font-medium text-slate-900">{{ $user->company->name }}</dd>
+            </div>
+            <div>
+                <dt class="text-sm text-slate-500">Website</dt>
+                <dd class="mt-0.5 text-sm font-medium text-slate-900">
+                    @if ($user->company->website)
+                        <a href="{{ $user->company->website }}" target="_blank" rel="noopener noreferrer" class="text-teal-600 hover:underline">{{ $user->company->website }}</a>
+                    @else
+                        —
+                    @endif
+                </dd>
+            </div>
+            <div class="sm:col-span-2">
+                <dt class="text-sm text-slate-500">Address</dt>
+                <dd class="mt-0.5 text-sm font-medium text-slate-900 whitespace-pre-line">{{ $user->company->address ?? '—' }}</dd>
+            </div>
+        </dl>
+
+        @if ($user->isHr())
+            <p class="mt-4 text-xs text-slate-400">
+                You can update these via <a href="{{ route('admin.company') }}" class="underline hover:text-slate-600">Admin → Company Details</a>.
+            </p>
+        @endif
+    </x-card>
+
+    <x-card>
         <h3 class="text-lg font-semibold text-slate-900 mb-4">My Leave Balances ({{ now()->year }})</h3>
 
         @if (count($balances) === 0)

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AttendanceExportController;
 use App\Http\Controllers\Admin\AttendancePdfExportController;
+use App\Livewire\Admin\CompanySettings;
 use App\Livewire\Admin\Dashboard as AdminDashboard;
 use App\Livewire\Admin\Departments;
 use App\Livewire\Admin\Employees;
@@ -52,6 +53,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/admin/work-schedule', WorkSchedule::class)->name('admin.work-schedule');
     Route::get('/admin/holidays', Holidays::class)->name('admin.holidays');
     Route::get('/admin/office-location', OfficeLocation::class)->name('admin.office-location');
+    Route::get('/admin/company', CompanySettings::class)->name('admin.company');
 });
 
 require __DIR__.'/auth.php';
