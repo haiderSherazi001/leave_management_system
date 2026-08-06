@@ -27,11 +27,17 @@
                     </div>
                 </div>
 
-                <div>
-                    <x-input-label for="password" :value="$editingId === null ? 'Password' : 'New Password (leave blank to keep current)'" />
-                    <x-text-input id="password" type="password" wire:model="password" class="mt-1 block w-full" />
-                    <x-input-error :messages="$errors->get('password')" class="mt-2" />
-                </div>
+                @if ($editingId === null)
+                    <p class="text-sm text-slate-500">
+                        No password to set here — the new employee will get an email with a link to set their own.
+                    </p>
+                @else
+                    <div>
+                        <x-input-label for="password" value="New Password (leave blank to keep current)" />
+                        <x-text-input id="password" type="password" wire:model="password" class="mt-1 block w-full" />
+                        <x-input-error :messages="$errors->get('password')" class="mt-2" />
+                    </div>
+                @endif
 
                 <div class="grid grid-cols-3 gap-4">
                     <div>

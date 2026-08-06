@@ -64,7 +64,11 @@ class Employees extends Component
         return [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($this->editingId)],
-            'password' => [$this->editingId === null ? 'required' : 'nullable', 'min:8'],
+            // Never required: creating an employee no longer takes a
+            // password from HR at all (an invite email handles that) - this
+            // only still applies when editing, as HR's optional manual
+            // override (e.g. if an invite email never arrives).
+            'password' => ['nullable', 'min:8'],
             'role' => [
                 'required',
                 Rule::enum(UserRole::class),
@@ -204,7 +208,6 @@ class Employees extends Component
             $service->create(
                 name: $validated['name'],
                 email: $validated['email'],
-                password: $validated['password'],
                 role: $validated['role'],
                 departmentId: $validated['departmentId'],
                 managerId: $validated['managerId'],

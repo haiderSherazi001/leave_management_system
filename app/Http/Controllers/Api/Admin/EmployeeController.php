@@ -59,7 +59,6 @@ final class EmployeeController extends Controller
         $user = $service->create(
             name: $validated['name'],
             email: $validated['email'],
-            password: $validated['password'],
             role: $validated['role'],
             departmentId: $validated['department_id'] ?? null,
             managerId: $validated['manager_id'] ?? null,
@@ -116,7 +115,11 @@ final class EmployeeController extends Controller
         return $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($editingId)],
-            'password' => [$editingId === null ? 'required' : 'nullable', 'min:8'],
+            // Never required: creating an employee no longer takes a
+            // password from HR at all (an invite email handles that) - this
+            // only still applies when editing, as HR's optional manual
+            // override.
+            'password' => ['nullable', 'min:8'],
             'role' => [
                 'required',
                 Rule::enum(UserRole::class),

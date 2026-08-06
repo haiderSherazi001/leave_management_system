@@ -10,9 +10,11 @@ use App\Livewire\Admin\LeaveTypes;
 use App\Models\Department;
 use App\Models\LeaveType;
 use App\Models\User;
+use App\Notifications\WelcomeNewEmployeeNotification;
 use App\Services\EmployeeDirectoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -83,6 +85,82 @@ class AdminManagementTest extends TestCase
             'allocated_days' => 15,
             'year' => now()->year,
         ]);
+    }
+
+    public function test_creating_an_employee_sends_a_welcome_invite_instead_of_setting_a_password(): void
+    {
+        Notification::fake();
+
+        $hr = User::factory()->hr()->create();
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('startCreate')
+            ->set('name', 'New Hire')
+            ->set('email', 'invited@leavedesk.test')
+            ->set('role', 'employee')
+            ->set('joinedAt', now()->toDateString())
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $newEmployee = User::where('email', 'invited@leavedesk.test')->firstOrFail();
+
+        Notification::assertSentTo($newEmployee, WelcomeNewEmployeeNotification::class);
+    }
+
+    public function test_the_welcome_invite_link_lets_the_new_employee_set_a_password_and_log_in(): void
+    {
+        Notification::fake();
+
+        $hr = User::factory()->hr()->create();
+        $this->actingAs($hr);
+
+        Livewire::test(Employees::class)
+            ->call('startCreate')
+            ->set('name', 'New Hire')
+            ->set('email', 'invited@leavedesk.test')
+            ->set('role', 'employee')
+            ->set('joinedAt', now()->toDateString())
+            ->call('save');
+
+        $newEmployee = User::where('email', 'invited@leavedesk.test')->firstOrFail();
+
+        $setPasswordUrl = null;
+        Notification::assertSentTo(
+            $newEmployee,
+            WelcomeNewEmployeeNotification::class,
+            function (WelcomeNewEmployeeNotification $notification) use ($newEmployee, &$setPasswordUrl) {
+                $setPasswordUrl = $notification->toMail($newEmployee)->actionUrl;
+
+                return true;
+            }
+        );
+        $this->assertNotNull($setPasswordUrl);
+
+        // Actually follow the link and complete the flow, rather than just
+        // asserting a notification was queued - matching this project's
+        // habit of verifying against the real thing.
+        $this->post('/logout');
+
+        $this->get($setPasswordUrl)->assertOk();
+
+        $query = [];
+        parse_str(parse_url($setPasswordUrl, PHP_URL_QUERY), $query);
+        $token = basename(parse_url($setPasswordUrl, PHP_URL_PATH));
+
+        $this->post('/reset-password', [
+            'token' => $token,
+            'email' => $query['email'],
+            'password' => 'a-new-password',
+            'password_confirmation' => 'a-new-password',
+        ])->assertRedirect(route('login'));
+
+        $this->post('/login', [
+            'email' => $newEmployee->email,
+            'password' => 'a-new-password',
+        ]);
+
+        $this->assertAuthenticatedAs($newEmployee->fresh());
     }
 
     public function test_hr_cannot_create_an_employee_with_a_duplicate_email(): void

@@ -7,9 +7,15 @@ namespace App\Services;
 use App\Enums\UserRole;
 use App\Models\Department;
 use App\Models\User;
+use App\Notifications\WelcomeNewEmployeeNotification;
 use DomainException;
+use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
+use Throwable;
 
 final class EmployeeDirectoryService
 {
@@ -93,10 +99,16 @@ final class EmployeeDirectoryService
         return $managers->all();
     }
 
+    /**
+     * HR never sets a password here — a random one is generated and never
+     * surfaced anywhere, then a "set your password" link (the same signed
+     * token this app's existing forgot-password flow already uses) is
+     * emailed to the new employee. HR only ever hands out a manual password
+     * via update() below, as a fallback if the invite email never arrives.
+     */
     public function create(
         string $name,
         string $email,
-        string $password,
         string $role,
         ?int $departmentId,
         ?int $managerId,
@@ -105,7 +117,7 @@ final class EmployeeDirectoryService
         $user = User::create([
             'name' => $name,
             'email' => $email,
-            'password' => Hash::make($password),
+            'password' => Hash::make(Str::random(40)),
             'role' => $role,
             'department_id' => $departmentId,
             'manager_id' => $managerId,
@@ -114,6 +126,11 @@ final class EmployeeDirectoryService
 
         $this->balances->provisionForUser($user->id, (int) date('Y', strtotime($joinedAt)));
         $this->syncDepartmentHeadship($user->id, $role, $departmentId);
+
+        $token = Password::createToken($user);
+        $setPasswordUrl = route('password.reset', ['token' => $token, 'email' => $user->email]);
+
+        $this->safeNotify($user, new WelcomeNewEmployeeNotification($setPasswordUrl));
 
         return $user;
     }
@@ -195,5 +212,23 @@ final class EmployeeDirectoryService
         }
 
         DB::table('users')->where('id', $userId)->update(['is_active' => $active]);
+    }
+
+    /**
+     * A mail hiccup (e.g. Mailpit not running locally) must never block
+     * creating the employee record itself - same "best-effort, log don't
+     * crash" philosophy already applied to notifications in
+     * LeaveRequestService.
+     */
+    private function safeNotify(User $notifiable, Notification $notification): void
+    {
+        try {
+            $notifiable->notify($notification);
+        } catch (Throwable $exception) {
+            Log::warning('Notification delivery failed: '.$notification::class, [
+                'notifiable_id' => $notifiable->id,
+                'exception' => $exception->getMessage(),
+            ]);
+        }
     }
 }
